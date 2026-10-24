@@ -1,0 +1,111 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`generateRegister produces the same UTF-8 register for a fixed seed 1`] = `
+"SN,GHAR_NO,NAAM,NAAM_EN,LINGA,JANMA_MITI,BABU_NAAM,NAGARIKTA_NO,JILLA,GABISA,WARD_NO,TOLE
+1,1,हरि खनाल,HARI KHANAL,m,6/9/2044,दीपक खनाल,89-25-76-74574,Chitwan,Mangalpur ,२,Bagar
+2,1,माया खनाल,MAYA KHANAL,Mahila,,राम खनाल,85-07-47-78354,Chitwan,Mangalpur,2,Bagar
+3,1,बिमला खनाल,Bimala Khanal,f,2016/3/25,हरि खनाल,88-04-42-55660,Chitwan,Mangalpur ,2,Bagar
+4,1,सरिता खनाल,Sarita Khanal,f,2029-08-07,दीपक खनाल,90-21-51-29299,Chitwan,Mangalpur ,2,Bagar
+5,2,दीपक थापा,Dipak Thapa,Male,2014/9/10,श्याम थापा,96-13-79-17840,Kaski,Bhalam,७,Shanti Tole
+6,2,दीपक थापा,Dipak Thapa,Male,2054/5/7,हरि थापा,95-39-45-86370,Kaski,Bhalam Gabisa,7,Shanti Tole
+7,2,दीपक थापा,Dipak Thapa,M,19/9/2015,हरि थापा,,Kaski,BHALAM,7,Shanti Tole
+8,3,राम शाह,Ram Shah,m,2038-04-04,हरि शाह,89-38-69-91262,Kaski,DHIKURPOKHARI,4,Naya Bazar
+9,3,सीता शाह,  sita shah ,f,14/11/2066,कमल शाह,,Kaski,Dhikurpokhari Gabisa,४,Naya Bazar
+10,3,माया शाह,MAYA SHAH,Mahila,2027/13/16,दीपक शाह,,Kaski,Dhikurpokhari Gabisa,4,Naya Bazar
+11,3,सीता शाह,Sita Shah,Female,2060-01-03,श्याम शाह,,Kaski,Dhikurpokhari,4,Naya Bazar
+12,3,सरिता शाह,Sarita Shah,f,२०६१-१२-२४,दीपक शाह,,KASKI,Dhikurpokhari ,0,Naya Bazar
+13,4,श्याम थापा,SHYAM THAPA,Purush,2012/13/7,दीपक थापा,95-66-72-54881,Kathmandu,Gokarna,5,Naya Bazar
+14,5,हरि शाह,Hari Shah,Purush,2032-03-28,दीपक शाह,,Kathmandu,Gokarna,७,Bagar
+15,5,श्याम शाह,SHYAM SHAH,M,2045.10.16,श्याम शाह,99-98-71-30872,Kathmandu,Gokarna Gabisa,7,Bagar
+16,5,गीता शाह,Gita Shah,F,२०५५-११-१२,दीपक शाह,,Kathmandu,GOKARNA,7,Bagar
+17,5,दीपक शाह,Dipak Shah,M,2035/7/25,कमल शाह,83-29-79-48665,KATHMANDU,Gokarna,7,Bagar
+18,5,राम शाह,Ram Shah,Male,2053.10.22,दीपक शाह,98-54-59-07252,Kathmandu,Gokarna Gabisa,30,Bagar
+19,6,दीपक थापा,Dipak Thapa,Purush,2027.11.23,राम थापा,91-67-48-77016,Kathmandu,Sitapaila VDC,2,‘Shanti’ Tole
+20,6,सीता थापा,  sita thapa ,F,2027-12-16,दीपक थापा,91-29-41-32627,Kathmandu,Sitapaila,2,‘Shanti’ Tole
+21,6,माया थापा,Maya Thapa,Female,2061/4/33,राम थापा,,Kathmandu,Sitapaila VDC,2,‘Shanti’ Tole
+22,6,सीता थापा,SITA THAPA,Mahila,2045/3/25,दीपक थापा,84-47-60-61963,Kathmandu,SITAPAILA,2,‘Shanti’ Tole
+23,7,कमल थापा,KAMAL THAPA,m,2033/6/13,कमल थापा,91-94-74-47929,Kaski,Hemja ,9,Naya Bazar
+24,7,कमल थापा,Kamal Thapa,M,2056-07-18,दीपक थापा,,Kaski,Hemja Gabisa,9,Naya Bazar
+25,7,बिमला थापा,Bimala Thapa,f,२८/१०/२०७३,राम थापा,,Kaski,Hemja VDC,9,Naya Bazar
+26,8,दीपक थापा,DIPAK THAPA,Male,१४/४/२०३५,श्याम थापा,81-64-72-43378,KATHMANDU,Dahachok Gabisa,8,Shanti Tole
+27,5,दीपक शाह,Deepak Sah,M,2035-07-25,कमल शाह,83-29-79-48665,KATHMANDU,Gokarna Gabisa,7,Bagar
+28,8,कमल थापा,Kamal Thapa,m,20/3/2074,श्याम थापा,,Kathmandu,Dahachok Gabisa,8,Shanti Tole
+29,8,सीता थापा,Sita Thapa,f,2053/11/23,राम थापा,98-01-41-52394,KATHMANDU,Dahachok Gabisa,8,Shanti Tole
+30,9,हरि मगर,HARI MAGAR,Male,९/१२/२०१९,हरि मगर,98-63-52-51055,Kathmandu,DAHACHOK,5,Naya Bazar
+"
+`;
+
+exports[`generateRegister produces the same Windows-1252 register for a fixed seed 1`] = `
+"SN,GHAR_NO,NAAM,NAAM_EN,LINGA,JANMA_MITI,BABU_NAAM,NAGARIKTA_NO,JILLA,GABISA,WARD_NO,TOLE
+1,1,xl/ vgfn,HARI KHANAL,m,6/9/2044,bLks vgfn,89-25-76-74574,Chitwan,Mangalpur ,2,Bagar
+2,1,dfof vgfn,MAYA KHANAL,Mahila,,/fd vgfn,85-07-47-78354,Chitwan,Mangalpur,2,Bagar
+3,1,ladnf vgfn,Bimala Khanal,f,2016/3/25,xl/ vgfn,88-04-42-55660,Chitwan,Mangalpur ,2,Bagar
+4,1,;l/tf vgfn,Sarita Khanal,f,2029-08-07,bLks vgfn,90-21-51-29299,Chitwan,Mangalpur ,2,Bagar
+5,2,bLks yfkf,Dipak Thapa,Male,2014/9/10,Zofd yfkf,96-13-79-17840,Kaski,Bhalam,7,Shanti Tole
+6,2,bLks yfkf,Dipak Thapa,Male,2054/5/7,xl/ yfkf,95-39-45-86370,Kaski,Bhalam Gabisa,7,Shanti Tole
+7,2,bLks yfkf,Dipak Thapa,M,19/9/2015,xl/ yfkf,,Kaski,BHALAM,7,Shanti Tole
+8,3,/fd zfx,Ram Shah,m,2038-04-04,xl/ zfx,89-38-69-91262,Kaski,DHIKURPOKHARI,4,Naya Bazar
+9,3,;Ltf zfx,  sita shah ,f,14/11/2066,sdn zfx,,Kaski,Dhikurpokhari Gabisa,4,Naya Bazar
+10,3,dfof zfx,MAYA SHAH,Mahila,2027/13/16,bLks zfx,,Kaski,Dhikurpokhari Gabisa,4,Naya Bazar
+11,3,;Ltf zfx,Sita Shah,Female,2060-01-03,Zofd zfx,,Kaski,Dhikurpokhari,4,Naya Bazar
+12,3,;l/tf zfx,Sarita Shah,f,2061-12-24,bLks zfx,,KASKI,Dhikurpokhari ,0,Naya Bazar
+13,4,Zofd yfkf,SHYAM THAPA,Purush,2012/13/7,bLks yfkf,95-66-72-54881,Kathmandu,Gokarna,5,Naya Bazar
+14,5,xl/ zfx,Hari Shah,Purush,2032-03-28,bLks zfx,,Kathmandu,Gokarna,7,Bagar
+15,5,Zofd zfx,SHYAM SHAH,M,2045.10.16,Zofd zfx,99-98-71-30872,Kathmandu,Gokarna Gabisa,7,Bagar
+16,5,uLtf zfx,Gita Shah,F,2055-11-12,bLks zfx,,Kathmandu,GOKARNA,7,Bagar
+17,5,bLks zfx,Dipak Shah,M,2035/7/25,sdn zfx,83-29-79-48665,KATHMANDU,Gokarna,7,Bagar
+18,5,/fd zfx,Ram Shah,Male,2053.10.22,bLks zfx,98-54-59-07252,Kathmandu,Gokarna Gabisa,30,Bagar
+19,6,bLks yfkf,Dipak Thapa,Purush,2027.11.23,/fd yfkf,91-67-48-77016,Kathmandu,Sitapaila VDC,2,‘Shanti’ Tole
+20,6,;Ltf yfkf,  sita thapa ,F,2027-12-16,bLks yfkf,91-29-41-32627,Kathmandu,Sitapaila,2,‘Shanti’ Tole
+21,6,dfof yfkf,Maya Thapa,Female,2061/4/33,/fd yfkf,,Kathmandu,Sitapaila VDC,2,‘Shanti’ Tole
+22,6,;Ltf yfkf,SITA THAPA,Mahila,2045/3/25,bLks yfkf,84-47-60-61963,Kathmandu,SITAPAILA,2,‘Shanti’ Tole
+23,7,sdn yfkf,KAMAL THAPA,m,2033/6/13,sdn yfkf,91-94-74-47929,Kaski,Hemja ,9,Naya Bazar
+24,7,sdn yfkf,Kamal Thapa,M,2056-07-18,bLks yfkf,,Kaski,Hemja Gabisa,9,Naya Bazar
+25,7,ladnf yfkf,Bimala Thapa,f,28/10/2073,/fd yfkf,,Kaski,Hemja VDC,9,Naya Bazar
+26,8,bLks yfkf,DIPAK THAPA,Male,14/4/2035,Zofd yfkf,81-64-72-43378,KATHMANDU,Dahachok Gabisa,8,Shanti Tole
+27,5,bLks zfx,Deepak Sah,M,2035-07-25,sdn zfx,83-29-79-48665,KATHMANDU,Gokarna Gabisa,7,Bagar
+28,8,sdn yfkf,Kamal Thapa,m,20/3/2074,Zofd yfkf,,Kathmandu,Dahachok Gabisa,8,Shanti Tole
+29,8,;Ltf yfkf,Sita Thapa,f,2053/11/23,/fd yfkf,98-01-41-52394,KATHMANDU,Dahachok Gabisa,8,Shanti Tole
+30,9,xl/ du/,HARI MAGAR,Male,9/12/2019,xl/ du/,98-63-52-51055,Kathmandu,DAHACHOK,5,Naya Bazar
+"
+`;
+
+exports[`generateRegister produces the same Windows-1252 register for a fixed seed 2`] = `
+{
+  "anomalies": [
+    {
+      "kind": "missing_dob",
+      "row": 2,
+    },
+    {
+      "kind": "impossible_dob",
+      "row": 10,
+    },
+    {
+      "kind": "invalid_ward",
+      "row": 12,
+    },
+    {
+      "kind": "impossible_dob",
+      "row": 13,
+    },
+    {
+      "kind": "invalid_ward",
+      "row": 18,
+    },
+    {
+      "kind": "impossible_dob",
+      "row": 21,
+    },
+  ],
+  "duplicates": [
+    {
+      "duplicateOf": 17,
+      "row": 27,
+    },
+  ],
+  "encoding": "cp1252",
+  "rows": 30,
+  "seed": 42,
+}
+`;
