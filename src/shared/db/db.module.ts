@@ -2,6 +2,7 @@ import { Global, Inject, Injectable, Module, OnApplicationShutdown } from '@nest
 import { Pool } from 'pg';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env.schema';
+import { PrismaService } from './prisma.service';
 
 export const PG_POOL = Symbol('PG_POOL');
 
@@ -23,7 +24,12 @@ class PoolShutdown implements OnApplicationShutdown {
         new Pool({ connectionString: env.DATABASE_URL, max: 10, connectionTimeoutMillis: 2000 }),
     },
     PoolShutdown,
+    {
+      provide: PrismaService,
+      inject: [ENV],
+      useFactory: (env: Env) => new PrismaService({ datasourceUrl: env.DATABASE_URL }),
+    },
   ],
-  exports: [PG_POOL],
+  exports: [PG_POOL, PrismaService],
 })
 export class DbModule {}

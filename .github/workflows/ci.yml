@@ -20,7 +20,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-  e2e:
+  integration:
     runs-on: ubuntu-latest
     needs: check
     steps:
@@ -30,9 +30,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: cp .env.example .env
-      # Same services and settings as local development.
-      - run: docker compose up -d --wait
+      # Both suites start their own Postgres, Redis and MinIO with Testcontainers.
+      - run: npm run test:int
       - run: npm run test:e2e
-      - if: failure()
-        run: docker compose logs

@@ -1,0 +1,467 @@
+// Four schemas keep concerns apart: control (how migrations run), staging (data in transit),
+// target (clean data), audit (evidence). Constraints Prisma cannot express (CHECKs, partial and
+// expression indexes, append-only triggers) live in raw-SQL migrations; see prisma/migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["control", "staging", "target", "audit"]
+}
+
+// ───────────────────────────── control ─────────────────────────────
+
+enum Role {
+  operator
+  reviewer
+  approver
+  auditor
+  admin
+
+  @@schema("control")
+}
+
+enum SourceKind {
+  csv
+  excel
+  xml
+  sql
+
+  @@schema("control")
+}
+
+enum RunMode {
+  dry_run
+  production
+
+  @@schema("control")
+}
+
+enum RunStatus {
+  draft
+  awaiting_approval
+  queued
+  running
+  completed
+  failed
+  rolled_back
+
+  @@schema("control")
+}
+
+enum BatchStatus {
+  pending
+  running
+  completed
+  failed
+
+  @@schema("control")
+}
+
+enum ApprovalDecision {
+  approved
+  rejected
+
+  @@schema("control")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         Role
+  failedLogins Int       @default(0) @map("failed_logins")
+  lockedUntil  DateTime? @map("locked_until") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  refreshTokens      RefreshToken[]
+  sources            Source[]
+  sourceFiles        SourceFile[]
+  mappings           Mapping[]
+  runsCreated        Run[]          @relation("RunCreatedBy")
+  runsApproved       Run[]          @relation("RunApprovedBy")
+  approvalsRequested Approval[]     @relation("ApprovalRequestedBy")
+  approvalsDecided   Approval[]     @relation("ApprovalDecidedBy")
+
+  @@map("users")
+  @@schema("control")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_tokens")
+  @@schema("control")
+}
+
+model Source {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  kind      SourceKind
+  agency    String
+  createdBy String     @map("created_by") @db.Uuid
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  creator  User         @relation(fields: [createdBy], references: [id])
+  files    SourceFile[]
+  mappings Mapping[]
+
+  @@map("sources")
+  @@schema("control")
+}
+
+model SourceFile {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId   String   @map("source_id") @db.Uuid
+  filename   String
+  objectKey  String   @map("object_key")
+  sha256     String   @unique
+  sizeBytes  BigInt   @map("size_bytes")
+  encoding   String?
+  rowCount   Int?     @map("row_count")
+  uploadedBy String   @map("uploaded_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  source   Source   @relation(fields: [sourceId], references: [id])
+  uploader User     @relation(fields: [uploadedBy], references: [id])
+  profile  Profile?
+  runs     Run[]
+
+  @@index([sourceId])
+  @@map("source_files")
+  @@schema("control")
+}
+
+model Profile {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceFileId String   @unique @map("source_file_id") @db.Uuid
+  report       Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sourceFile SourceFile @relation(fields: [sourceFileId], references: [id])
+
+  @@map("profiles")
+  @@schema("control")
+}
+
+model Mapping {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId  String   @map("source_id") @db.Uuid
+  version   Int
+  spec      Json
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  source  Source    @relation(fields: [sourceId], references: [id])
+  creator User      @relation(fields: [createdBy], references: [id])
+  runs    Run[]
+  lineage Lineage[]
+
+  @@unique([sourceId, version])
+  @@map("mappings")
+  @@schema("control")
+}
+
+model Run {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceFileId String    @map("source_file_id") @db.Uuid
+  mappingId    String    @map("mapping_id") @db.Uuid
+  mode         RunMode
+  status       RunStatus @default(draft)
+  counts       Json      @default("{}")
+  createdBy    String    @map("created_by") @db.Uuid
+  approvedBy   String?   @map("approved_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  sourceFile SourceFile @relation(fields: [sourceFileId], references: [id])
+  mapping    Mapping    @relation(fields: [mappingId], references: [id])
+  creator    User       @relation("RunCreatedBy", fields: [createdBy], references: [id])
+  approver   User?      @relation("RunApprovedBy", fields: [approvedBy], references: [id])
+  batches    Batch[]
+  approvals  Approval[]
+  rawRows    RawRow[]
+  lineage    Lineage[]
+
+  @@index([status])
+  @@map("runs")
+  @@schema("control")
+}
+
+model Batch {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId       String      @map("run_id") @db.Uuid
+  seq         Int
+  rowFrom     Int         @map("row_from")
+  rowTo       Int         @map("row_to")
+  status      BatchStatus @default(pending)
+  attempts    Int         @default(0)
+  error       String?
+  heartbeatAt DateTime?   @map("heartbeat_at") @db.Timestamptz(3)
+
+  run     Run       @relation(fields: [runId], references: [id])
+  rawRows RawRow[]
+  lineage Lineage[]
+
+  @@unique([runId, seq])
+  @@map("batches")
+  @@schema("control")
+}
+
+model Approval {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId       String            @map("run_id") @db.Uuid
+  requestedBy String            @map("requested_by") @db.Uuid
+  decidedBy   String?           @map("decided_by") @db.Uuid
+  decision    ApprovalDecision?
+  reason      String?
+  expiresAt   DateTime          @map("expires_at") @db.Timestamptz(3)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  decidedAt   DateTime?         @map("decided_at") @db.Timestamptz(3)
+
+  run       Run   @relation(fields: [runId], references: [id])
+  requester User  @relation("ApprovalRequestedBy", fields: [requestedBy], references: [id])
+  decider   User? @relation("ApprovalDecidedBy", fields: [decidedBy], references: [id])
+
+  @@index([runId])
+  @@map("approvals")
+  @@schema("control")
+}
+
+// ───────────────────────────── staging ─────────────────────────────
+
+enum StagedStatus {
+  valid
+  quarantined
+  duplicate_review
+  loaded
+
+  @@schema("staging")
+}
+
+enum MatchDecision {
+  pending
+  link
+  not_same
+
+  @@schema("staging")
+}
+
+model RawRow {
+  id      BigInt @id @default(autoincrement())
+  runId   String @map("run_id") @db.Uuid
+  batchId String @map("batch_id") @db.Uuid
+  rowNo   Int    @map("row_no")
+  raw     Json
+  rowHash String @map("row_hash")
+
+  run       Run        @relation(fields: [runId], references: [id])
+  batch     Batch      @relation(fields: [batchId], references: [id])
+  stagedRow StagedRow?
+  lineage   Lineage[]
+
+  // Re-extracting a batch after a crash must not duplicate rows.
+  @@unique([runId, rowNo])
+  @@index([batchId])
+  @@map("raw_rows")
+  @@schema("staging")
+}
+
+model StagedRow {
+  id         BigInt       @id @default(autoincrement())
+  rawRowId   BigInt       @unique @map("raw_row_id")
+  normalized Json
+  warnings   Json         @default("[]")
+  status     StagedStatus
+
+  rawRow     RawRow           @relation(fields: [rawRowId], references: [id])
+  quarantine Quarantine[]
+  matchesA   MatchCandidate[] @relation("MatchRowA")
+  matchesB   MatchCandidate[] @relation("MatchRowB")
+
+  @@index([status])
+  @@map("staged_rows")
+  @@schema("staging")
+}
+
+model Quarantine {
+  id          BigInt    @id @default(autoincrement())
+  stagedRowId BigInt    @map("staged_row_id")
+  stage       String
+  reasons     Json
+  resolvedBy  String?   @map("resolved_by") @db.Uuid
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  stagedRow StagedRow @relation(fields: [stagedRowId], references: [id])
+
+  @@index([stagedRowId])
+  @@map("quarantine")
+  @@schema("staging")
+}
+
+/// A pair scored by the matcher: row_a is the incoming staged row, row_b an earlier staged row
+/// (same run) or the staged row that produced an existing person.
+model MatchCandidate {
+  id        BigInt        @id @default(autoincrement())
+  rowA      BigInt        @map("row_a")
+  rowB      BigInt        @map("row_b")
+  score     Decimal       @db.Decimal(4, 3)
+  features  Json
+  decision  MatchDecision @default(pending)
+  decidedBy String?       @map("decided_by") @db.Uuid
+  decidedAt DateTime?     @map("decided_at") @db.Timestamptz(3)
+
+  a StagedRow @relation("MatchRowA", fields: [rowA], references: [id])
+  b StagedRow @relation("MatchRowB", fields: [rowB], references: [id])
+
+  @@unique([rowA, rowB])
+  @@index([decision])
+  @@map("match_candidates")
+  @@schema("staging")
+}
+
+// ───────────────────────────── target ─────────────────────────────
+
+enum Gender {
+  male
+  female
+  other
+
+  @@schema("target")
+}
+
+model LocalUnit {
+  code         String @id
+  nameEn       String @map("name_en")
+  nameNe       String @map("name_ne")
+  districtCode String @map("district_code")
+  province     Int
+  type         String
+  wardCount    Int    @map("ward_count")
+
+  legacyVdcs LegacyVdc[]
+  households Household[]
+
+  @@map("local_units")
+  @@schema("target")
+}
+
+model LegacyVdc {
+  id            Int     @id @default(autoincrement())
+  nameEn        String  @map("name_en")
+  nameNe        String  @map("name_ne")
+  districtCode  String  @map("district_code")
+  /// Null when the old VDC was split across several local units: needs review.
+  localUnitCode String? @map("local_unit_code")
+
+  localUnit LocalUnit? @relation(fields: [localUnitCode], references: [code])
+
+  @@index([districtCode, nameEn])
+  @@map("legacy_vdcs")
+  @@schema("target")
+}
+
+model Household {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  localUnitCode String  @map("local_unit_code")
+  wardNo        Int     @map("ward_no")
+  tole          String?
+  headPersonId  String? @unique @map("head_person_id") @db.Uuid
+  createdByRun  String? @map("created_by_run") @db.Uuid
+
+  localUnit LocalUnit @relation(fields: [localUnitCode], references: [code])
+  head      Person?   @relation("HouseholdHead", fields: [headPersonId], references: [id])
+  members   Person[]  @relation("HouseholdMembers")
+
+  @@map("households")
+  @@schema("target")
+}
+
+model Person {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId   String?   @map("household_id") @db.Uuid
+  nameNe        String    @map("name_ne")
+  nameEn        String    @map("name_en")
+  gender        Gender?
+  dobAd         DateTime? @map("dob_ad") @db.Date
+  citizenshipNo String?   @unique @map("citizenship_no")
+  fatherNameNe  String?   @map("father_name_ne")
+  createdByRun  String?   @map("created_by_run") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  household Household? @relation("HouseholdMembers", fields: [householdId], references: [id])
+  headOf    Household? @relation("HouseholdHead")
+
+  @@index([householdId])
+  // Fuzzy name search. Needs pg_trgm, which the init migration creates first.
+  @@index([nameEn(ops: raw("gin_trgm_ops"))], type: Gin, map: "persons_name_en_trgm")
+  @@map("persons")
+  @@schema("target")
+}
+
+model Lineage {
+  targetTable String @map("target_table")
+  targetId    String @map("target_id") @db.Uuid
+  rawRowId    BigInt @map("raw_row_id")
+  mappingId   String @map("mapping_id") @db.Uuid
+  runId       String @map("run_id") @db.Uuid
+  batchId     String @map("batch_id") @db.Uuid
+
+  rawRow  RawRow  @relation(fields: [rawRowId], references: [id])
+  mapping Mapping @relation(fields: [mappingId], references: [id])
+  run     Run     @relation(fields: [runId], references: [id])
+  batch   Batch   @relation(fields: [batchId], references: [id])
+
+  @@id([targetTable, targetId, rawRowId])
+  @@index([runId])
+  @@index([rawRowId])
+  @@map("lineage")
+  @@schema("target")
+}
+
+// ───────────────────────────── audit ─────────────────────────────
+// No foreign keys out of audit: evidence must outlive the rows it describes.
+
+model AuditEvent {
+  stream     String
+  seq        BigInt
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  entity     String
+  entityId   String?  @map("entity_id")
+  payload    Json
+  reason     String?
+  prevHash   String   @map("prev_hash")
+  hash       String
+
+  @@id([stream, seq])
+  @@index([entity, entityId])
+  @@index([occurredAt])
+  @@map("events")
+  @@schema("audit")
+}
+
+model AuditCheckpoint {
+  stream    String
+  seq       BigInt
+  hash      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([stream, seq])
+  @@map("checkpoints")
+  @@schema("audit")
+}
