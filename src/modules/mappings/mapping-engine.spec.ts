@@ -1,10 +1,15 @@
+import reference from '../../../prisma/reference/address.json';
 import spec from '../../../test/fixtures/mappings/household-register.v1.json';
 import { generateRegister } from '../../../tools/generate-legacy-data';
+import { buildAddressReference } from '../transforms';
 import { compileMapping, mapRow, MappedRow } from './mapping-engine';
 import { mappingSpecSchema } from './mapping-spec';
 
 const ctx = { today: '2026-10-24' };
-const mapping = compileMapping(mappingSpecSchema.parse(spec));
+const mapping = compileMapping(
+  mappingSpecSchema.parse(spec),
+  buildAddressReference(reference.localUnits, reference.legacyVdcs),
+);
 
 // The same seed gives the same people in both encodings, so the UTF-8 file holds the exact
 // Devanagari each Preeti name must convert to.
@@ -75,14 +80,45 @@ describe('mapRow with the household register mapping', () => {
     }
   });
 
-  it('accepts every row with no planted problem (ward checks come with the address crosswalk)', () => {
+  const GABISA = cp1252.header.indexOf('GABISA');
+  const inBhalam = (row: number) => /bhalam/i.test(cp1252.rows[row - 1]![GABISA]!);
+
+  it('places each household in the local unit that replaced its VDC', () => {
+    const units = new Set(mapped.map((r) => r.values.local_unit_code).filter(Boolean));
+    expect(units).toEqual(
+      new Set([
+        'kaski-pokhara',
+        'kaski-annapurna',
+        'chitwan-bharatpur',
+        'kathmandu-nagarjun',
+        'kathmandu-chandragiri',
+        'kathmandu-gokarneshwor',
+      ]),
+    );
+  });
+
+  it('sends every row from a VDC that was split across units to review', () => {
+    const rows = mapped.map((_, i) => i + 1).filter(inBhalam);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(fieldErrors(row, 'local_unit_code')[0]?.message).toMatch(/needs review/);
+    }
+  });
+
+  it('quarantines rows whose ward does not exist in the old VDC', () => {
+    const rows = rowsWith('invalid_ward');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(fieldErrors(row, 'ward_no').length).toBeGreaterThan(0);
+  });
+
+  it('accepts every row with no planted problem', () => {
     const planted = new Set(
       cp1252.truth.anomalies
-        .filter((a) => a.kind !== 'invalid_ward' && !(a.kind === 'ad_dob' && adYear(a.row) >= 2000))
+        .filter((a) => !(a.kind === 'ad_dob' && adYear(a.row) >= 2000))
         .map((a) => a.row),
     );
-    const clean = mapped.filter((_, i) => !planted.has(i + 1));
-    expect(clean.length).toBeGreaterThan(400);
+    const clean = mapped.filter((_, i) => !planted.has(i + 1) && !inBhalam(i + 1));
+    expect(clean.length).toBeGreaterThan(350);
     for (const row of clean) expect(row).toMatchObject({ status: 'valid', errors: [] });
   });
 
@@ -103,8 +139,22 @@ describe('mapRow with the household register mapping', () => {
       'citizenship_no',
       'dob_ad',
       'gender',
+      'local_unit_code',
       'name_en',
       'name_ne',
+      'ward_no',
+    ]);
+  });
+
+  it('requires a complete address when a row has a household number', () => {
+    const row = mapRow(
+      { NAAM: ';Ltf', NAAM_EN: 'Sita', GHAR_NO: '7', JILLA: '', GABISA: '', WARD_NO: '' },
+      mapping,
+      ctx,
+    );
+    expect(row.errors.map((e) => [e.field, e.message])).toEqual([
+      ['local_unit_code', 'required: is required'],
+      ['ward_no', 'required: is required'],
     ]);
   });
 });

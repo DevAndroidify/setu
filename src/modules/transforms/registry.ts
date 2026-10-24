@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AddressReference, EMPTY_ADDRESS_REFERENCE, vdcToLocalUnit } from './address';
 import { bsToAd, DEFAULT_BS_FORMATS, fiscalYear } from './bs-date';
 import { devanagariDigits } from './digits';
 import { preetiToUnicode } from './preeti';
@@ -11,13 +12,16 @@ type TransformFn = (input: string) => TransformResult<string>;
 type Definition = {
   /** Validates the step's args as written in a mapping spec. */
   args: z.ZodType;
-  /** Binds validated args to the transform. */
-  bind: (args: never) => TransformFn;
+  /** Binds validated args (and reference data) to the transform. */
+  bind: (args: never, ref: AddressReference) => TransformFn;
 };
 
-const define = <A>(args: z.ZodType<A>, bind: (args: A) => TransformFn): Definition => ({
+const define = <A>(
+  args: z.ZodType<A>,
+  bind: (args: A, ref: AddressReference) => TransformFn,
+): Definition => ({
   args,
-  bind: bind as (args: never) => TransformFn,
+  bind: bind as (args: never, ref: AddressReference) => TransformFn,
 });
 
 const noArgs = z.object({}).strict().optional();
@@ -49,14 +53,21 @@ export const TRANSFORMS = {
       .strict(),
     (args) => (v) => mapValues(v, args),
   ),
+  vdcToLocalUnit: define(noArgs, (_, ref) => (v) => vdcToLocalUnit(v, ref)),
 } satisfies Record<string, Definition>;
 
 export type TransformName = keyof typeof TRANSFORMS;
 export type TransformStep = { name: string; args?: unknown };
 export type CompiledStep = { name: string; run: TransformFn };
 
-/** Checks a step's name and args; returns the ready-to-run step or why it is invalid. */
-export function compileStep(step: TransformStep): CompiledStep | { error: string } {
+/**
+ * Checks a step's name and args; returns the ready-to-run step or why it is invalid. Address
+ * transforms look values up in `ref`, loaded from target's reference tables by the caller.
+ */
+export function compileStep(
+  step: TransformStep,
+  ref: AddressReference = EMPTY_ADDRESS_REFERENCE,
+): CompiledStep | { error: string } {
   const definition = (TRANSFORMS as Record<string, Definition>)[step.name];
   if (!definition) return { error: `unknown transform "${step.name}"` };
   const args = definition.args.safeParse(step.args);
@@ -64,7 +75,7 @@ export function compileStep(step: TransformStep): CompiledStep | { error: string
     const why = args.error.issues.map((i) => `${i.path.join('.') || 'args'} ${i.message}`);
     return { error: `invalid args for ${step.name}: ${why.join('; ')}` };
   }
-  return { name: step.name, run: definition.bind(args.data as never) };
+  return { name: step.name, run: definition.bind(args.data as never, ref) };
 }
 
 /** Runs steps in order, collecting warnings; stops at the first step that fails. */

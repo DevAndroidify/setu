@@ -4,8 +4,17 @@ import { PrismaService } from '../../shared/db/prisma.service';
 
 export type Tx = Prisma.TransactionClient;
 
+export type NewHousehold = {
+  id: string;
+  localUnitCode: string;
+  wardNo: number;
+  tole: string | null;
+  createdByRun: string;
+};
+
 export type NewPerson = {
   id: string;
+  householdId: string | null;
   nameNe: string;
   nameEn: string;
   gender: Gender | null;
@@ -18,6 +27,37 @@ export type NewPerson = {
 @Injectable()
 export class TargetRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async addressReference() {
+    const [units, vdcs] = await Promise.all([
+      this.prisma.localUnit.findMany({ select: { code: true, wardCount: true } }),
+      this.prisma.legacyVdc.findMany({
+        select: { districtCode: true, nameEn: true, localUnitCode: true },
+      }),
+    ]);
+    return { units, vdcs };
+  }
+
+  /** Inserts households; ones that already exist (made by an earlier batch) are skipped. */
+  async insertHouseholds(tx: Tx, households: NewHousehold[]): Promise<void> {
+    if (households.length === 0) return;
+    await tx.household.createMany({ data: households, skipDuplicates: true });
+  }
+
+  /** Sets each household's head, unless it already has one. */
+  async setHouseholdHeads(tx: Tx, heads: { householdId: string; personId: string }[]) {
+    for (const { householdId, personId } of heads) {
+      await tx.household.updateMany({
+        where: { id: householdId, headPersonId: null },
+        data: { headPersonId: personId },
+      });
+    }
+  }
+
+  async deleteHouseholdsForRun(tx: Tx, runId: string): Promise<number> {
+    const { count } = await tx.household.deleteMany({ where: { createdByRun: runId } });
+    return count;
+  }
 
   async existingCitizenshipNos(tx: Tx, numbers: string[]): Promise<Set<string>> {
     if (numbers.length === 0) return new Set();

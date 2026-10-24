@@ -399,7 +399,7 @@ model LegacyVdc {
 
   localUnit LocalUnit? @relation(fields: [localUnitCode], references: [code])
 
-  @@index([districtCode, nameEn])
+  @@unique([districtCode, nameEn])
   @@map("legacy_vdcs")
   @@schema("target")
 }

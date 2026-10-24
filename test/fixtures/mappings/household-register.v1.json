@@ -3,13 +3,24 @@
     {
       "target": "person.name_ne",
       "from": ["NAAM"],
-      "transforms": [{ "name": "preetiToUnicode" }, { "name": "trim" }],
+      "transforms": [
+        {
+          "name": "preetiToUnicode"
+        },
+        {
+          "name": "trim"
+        }
+      ],
       "rules": ["required", "maxLength:100"]
     },
     {
       "target": "person.name_en",
       "from": ["NAAM_EN"],
-      "transforms": [{ "name": "titleCase" }],
+      "transforms": [
+        {
+          "name": "titleCase"
+        }
+      ],
       "rules": ["required", "maxLength:100"]
     },
     {
@@ -35,10 +46,14 @@
       "target": "person.dob_ad",
       "from": ["JANMA_MITI"],
       "transforms": [
-        { "name": "devanagariDigits" },
+        {
+          "name": "devanagariDigits"
+        },
         {
           "name": "bsToAd",
-          "args": { "formats": ["YYYY/M/D", "YYYY-MM-DD", "D/M/YYYY", "YYYY.MM.DD"] }
+          "args": {
+            "formats": ["YYYY/M/D", "YYYY-MM-DD", "D/M/YYYY", "YYYY.MM.DD"]
+          }
         }
       ],
       "rules": ["notFuture", "after:1940-01-01"]
@@ -46,13 +61,69 @@
     {
       "target": "person.citizenship_no",
       "from": ["NAGARIKTA_NO"],
-      "transforms": [{ "name": "trim" }],
+      "transforms": [
+        {
+          "name": "trim"
+        }
+      ],
       "rules": ["citizenshipFormat"]
     },
     {
       "target": "person.father_name_ne",
       "from": ["BABU_NAAM"],
-      "transforms": [{ "name": "preetiToUnicode" }, { "name": "trim" }],
+      "transforms": [
+        {
+          "name": "preetiToUnicode"
+        },
+        {
+          "name": "trim"
+        }
+      ],
+      "onError": "null"
+    },
+    {
+      "target": "household.no",
+      "from": ["GHAR_NO"],
+      "transforms": [
+        {
+          "name": "devanagariDigits"
+        },
+        {
+          "name": "trim"
+        }
+      ]
+    },
+    {
+      "target": "household.local_unit_code",
+      "from": ["JILLA", "GABISA"],
+      "transforms": [
+        {
+          "name": "vdcToLocalUnit"
+        }
+      ],
+      "rules": ["required"]
+    },
+    {
+      "target": "household.ward_no",
+      "from": ["WARD_NO"],
+      "transforms": [
+        {
+          "name": "devanagariDigits"
+        },
+        {
+          "name": "trim"
+        }
+      ],
+      "rules": ["required", "max:9", "wardInUnit"]
+    },
+    {
+      "target": "household.tole",
+      "from": ["TOLE"],
+      "transforms": [
+        {
+          "name": "trim"
+        }
+      ],
       "onError": "null"
     }
   ]

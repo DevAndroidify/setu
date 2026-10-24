@@ -69,6 +69,14 @@ export class PipelineRepository {
     return counts;
   }
 
+  /**
+   * Serializes one kind of work across the batches of a run until the transaction ends, so
+   * each batch sees what the batches before it committed.
+   */
+  async lockRun(tx: Tx, runId: string, work: 'load'): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${work}:${runId}`}, 0))`;
+  }
+
   // ───────────── batches ─────────────
 
   /** Creates the batch for (run, seq) once; extracting the same batch again returns it. */

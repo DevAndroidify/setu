@@ -1,30 +1,39 @@
-import { CompiledStep, compileStep, runChain } from '../transforms';
+import {
+  AddressReference,
+  CompiledStep,
+  compileStep,
+  EMPTY_ADDRESS_REFERENCE,
+  runChain,
+} from '../transforms';
 import {
   compileRule,
-  PERSON_FIELDS,
-  PersonField,
-  personSchema,
+  ROW_FIELDS,
+  RowField,
+  rowSchema,
   Rule,
   RuleContext,
+  TARGET_FIELDS,
 } from '../validation';
 import type { MappingSpec } from './mapping-spec';
 
 /** A problem with one field of one row. Every problem is kept, not just the first. */
 export type FieldIssue = {
-  field: PersonField;
+  field: RowField;
   stage: 'transform' | 'validate';
   message: string;
 };
 
+export type NormalizedRow = Record<RowField, string | null>;
+
 export type MappedRow = {
-  values: Record<PersonField, string | null>;
+  values: NormalizedRow;
   warnings: FieldIssue[];
   errors: FieldIssue[];
   status: 'valid' | 'quarantined';
 };
 
 type CompiledField = {
-  field: PersonField;
+  field: RowField;
   from: string[];
   steps: CompiledStep[];
   rules: { spec: string; check: Rule }[];
@@ -33,26 +42,26 @@ type CompiledField = {
 
 export type CompiledMapping = { fields: CompiledField[]; columns: string[] };
 
-/** Prepares a validated spec for fast repeated use. Throws only on an unvalidated spec. */
-export function compileMapping(spec: MappingSpec): CompiledMapping {
+/**
+ * Prepares a validated spec for fast repeated use, bound to the address reference data that
+ * the crosswalk transform and ward rule look up. Throws only on an unvalidated spec.
+ */
+export function compileMapping(
+  spec: MappingSpec,
+  ref: AddressReference = EMPTY_ADDRESS_REFERENCE,
+): CompiledMapping {
   const fields = spec.fields.map((f): CompiledField => {
     const steps = f.transforms.map((step) => {
-      const compiled = compileStep(step);
+      const compiled = compileStep(step, ref);
       if ('error' in compiled) throw new Error(compiled.error);
       return compiled;
     });
     const rules = f.rules.map((spec) => {
-      const check = compileRule(spec);
+      const check = compileRule(spec, ref);
       if (typeof check !== 'function') throw new Error(check.error);
       return { spec, check };
     });
-    return {
-      field: f.target.replace(/^person\./, '') as PersonField,
-      from: f.from,
-      steps,
-      rules,
-      onError: f.onError,
-    };
+    return { field: TARGET_FIELDS[f.target]!, from: f.from, steps, rules, onError: f.onError };
   });
   return { fields, columns: [...new Set(fields.flatMap((f) => f.from))] };
 }
@@ -76,10 +85,7 @@ export function transformRow(
   raw: Record<string, string>,
   mapping: CompiledMapping,
 ): TransformedRow {
-  const values = Object.fromEntries(PERSON_FIELDS.map((f) => [f, null])) as Record<
-    PersonField,
-    string | null
-  >;
+  const values = Object.fromEntries(ROW_FIELDS.map((f) => [f, null])) as NormalizedRow;
   const warnings: FieldIssue[] = [];
   const errors: FieldIssue[] = [];
 
@@ -103,20 +109,21 @@ export function transformRow(
 }
 
 /**
- * Validate stage: field rules, then the entity schema (required fields, enums, date format).
- * Fields in `skip` already failed to transform and are not reported twice.
+ * Validate stage: field rules, then the row schema (required fields, enums, date format, a
+ * complete household address). Fields in `skip` already failed to transform and are not
+ * reported twice.
  */
 export function validateRow(
-  values: Record<PersonField, string | null>,
+  values: NormalizedRow,
   mapping: CompiledMapping,
   ctx: RuleContext,
-  skip: ReadonlySet<PersonField> = new Set(),
+  skip: ReadonlySet<RowField> = new Set(),
 ): FieldIssue[] {
   const errors: FieldIssue[] = [];
   for (const f of mapping.fields) {
     if (skip.has(f.field)) continue;
     for (const rule of f.rules) {
-      const message = rule.check(values[f.field], ctx);
+      const message = rule.check(values[f.field], ctx, values);
       if (message) {
         errors.push({ field: f.field, stage: 'validate', message: `${rule.spec}: ${message}` });
       }
@@ -124,10 +131,10 @@ export function validateRow(
   }
 
   const flagged = new Set([...skip, ...errors.map((e) => e.field)]);
-  const shape = personSchema.safeParse(values);
+  const shape = rowSchema.safeParse(values);
   if (!shape.success) {
     for (const issue of shape.error.issues) {
-      const field = issue.path[0] as PersonField;
+      const field = issue.path[0] as RowField;
       if (!flagged.has(field)) {
         errors.push({ field, stage: 'validate', message: issue.message });
         flagged.add(field);

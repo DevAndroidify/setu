@@ -10,5 +10,6 @@ export {
   type CompiledMapping,
   type FieldIssue,
   type MappedRow,
+  type NormalizedRow,
 } from './mapping-engine';
 export { mappingSpecSchema, type MappingSpec } from './mapping-spec';

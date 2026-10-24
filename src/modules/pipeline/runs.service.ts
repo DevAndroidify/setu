@@ -211,7 +211,7 @@ export class RunsService {
 
   /**
    * Undoes a production run's loads, newest batch first, one transaction per batch: deletes the
-   * persons and their lineage and marks the staged rows valid again. Refused when a later run
+   * persons and their lineage and marks the staged rows valid again; then the run's households. Refused when a later run
    * has linked to those persons. Safe to repeat after a crash: emptied batches are skipped.
    */
   async rollback(id: string, user: AuthUser): Promise<Run> {
@@ -249,6 +249,7 @@ export class RunsService {
     }
 
     await this.repo.transaction(async (tx) => {
+      const households = await this.target.deleteHouseholdsForRun(tx, id);
       await this.repo.transition(tx, id, ['completed', 'cancelled', 'failed'], 'rolled_back');
       await this.audit.append(
         {
@@ -257,7 +258,7 @@ export class RunsService {
           action: 'run.rolled_back',
           entity: 'run',
           entityId: id,
-          payload: { removed },
+          payload: { removed, households },
         },
         tx,
       );

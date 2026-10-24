@@ -13,6 +13,13 @@ export {
 } from './bs-date';
 export { preetiToUnicode } from './preeti';
 export {
+  buildAddressReference,
+  EMPTY_ADDRESS_REFERENCE,
+  placeKey,
+  vdcToLocalUnit,
+  type AddressReference,
+} from './address';
+export {
   TRANSFORMS,
   compileStep,
   runChain,

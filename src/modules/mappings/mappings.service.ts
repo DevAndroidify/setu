@@ -3,6 +3,7 @@ import type { Mapping } from '@prisma/client';
 import { AuditService, GLOBAL_STREAM } from '../audit';
 import type { AuthUser } from '../auth';
 import { SourcesService } from '../sources';
+import { TargetService } from '../target/target.service';
 import { todayInNepal } from '../validation';
 import { compileMapping, CompiledMapping, mapRow, MappedRow } from './mapping-engine';
 import { MappingSpec, mappingSpecSchema } from './mapping-spec';
@@ -17,6 +18,7 @@ export class MappingsService {
   constructor(
     private readonly repo: MappingsRepository,
     private readonly sources: SourcesService,
+    private readonly target: TargetService,
     private readonly audit: AuditService,
   ) {}
 
@@ -49,9 +51,15 @@ export class MappingsService {
     return this.repo.listForSource(sourceId);
   }
 
-  /** The stored spec, compiled. Specs are validated before saving, so this cannot fail. */
-  compile(mapping: Mapping): CompiledMapping {
-    return compileMapping(mappingSpecSchema.parse(mapping.spec));
+  /**
+   * The stored spec, compiled against the current address reference data. Specs are validated
+   * before saving, so this cannot fail.
+   */
+  async compile(mapping: Mapping): Promise<CompiledMapping> {
+    return compileMapping(
+      mappingSpecSchema.parse(mapping.spec),
+      await this.target.addressReference(),
+    );
   }
 
   /** Runs a mapping over the first rows of a stored file. Writes nothing. */
@@ -63,7 +71,7 @@ export class MappingsService {
         'The file belongs to a different source than the mapping',
       );
     }
-    const compiled = this.compile(mapping);
+    const compiled = await this.compile(mapping);
     const ctx = { today: todayInNepal() };
 
     const rows: PreviewRow[] = [];

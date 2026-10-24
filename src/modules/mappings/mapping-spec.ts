@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { compileStep } from '../transforms';
-import { compileRule, PERSON_FIELDS } from '../validation';
+import { compileRule, TARGET_FIELDS } from '../validation';
 
-const TARGETS = PERSON_FIELDS.map((f) => `person.${f}` as const);
+const TARGETS = Object.keys(TARGET_FIELDS);
 const REQUIRED_TARGETS = ['person.name_ne', 'person.name_en'];
 
 const fieldSchema = z
   .object({
-    /** Target column, e.g. "person.dob_ad". */
+    /** Target column, e.g. "person.dob_ad" or "household.ward_no". */
     target: z.enum(TARGETS as [string, ...string[]]),
     /** Source columns; several are joined with a space (e.g. first and last name). */
     from: z.array(z.string().min(1)).min(1),
@@ -21,7 +21,7 @@ const fieldSchema = z
   .strict();
 
 /**
- * A declarative mapping from one legacy source to target persons. Saved as a new version on
+ * A declarative mapping from one legacy source to target persons and their households. Saved as a new version on
  * every edit; a run pins one version.
  */
 export const mappingSpecSchema = z

@@ -1,0 +1,116 @@
+{
+  "about": "Local units and the pre-2017 VDCs of the districts the synthetic register uses. Codes are Setu's own (district-unit), not official codes. A VDC with localUnitCode null could not be placed in one unit and goes to review. Replace with the full 753-unit list before using real data.",
+  "localUnits": [
+    {
+      "code": "kaski-pokhara",
+      "nameEn": "Pokhara Metropolitan City",
+      "nameNe": "पोखरा महानगरपालिका",
+      "districtCode": "kaski",
+      "province": 4,
+      "type": "metropolitan_city",
+      "wardCount": 33
+    },
+    {
+      "code": "kaski-annapurna",
+      "nameEn": "Annapurna Rural Municipality",
+      "nameNe": "अन्नपूर्ण गाउँपालिका",
+      "districtCode": "kaski",
+      "province": 4,
+      "type": "rural_municipality",
+      "wardCount": 11
+    },
+    {
+      "code": "chitwan-bharatpur",
+      "nameEn": "Bharatpur Metropolitan City",
+      "nameNe": "भरतपुर महानगरपालिका",
+      "districtCode": "chitwan",
+      "province": 3,
+      "type": "metropolitan_city",
+      "wardCount": 29
+    },
+    {
+      "code": "kathmandu-nagarjun",
+      "nameEn": "Nagarjun Municipality",
+      "nameNe": "नागार्जुन नगरपालिका",
+      "districtCode": "kathmandu",
+      "province": 3,
+      "type": "municipality",
+      "wardCount": 10
+    },
+    {
+      "code": "kathmandu-chandragiri",
+      "nameEn": "Chandragiri Municipality",
+      "nameNe": "चन्द्रागिरि नगरपालिका",
+      "districtCode": "kathmandu",
+      "province": 3,
+      "type": "municipality",
+      "wardCount": 15
+    },
+    {
+      "code": "kathmandu-gokarneshwor",
+      "nameEn": "Gokarneshwor Municipality",
+      "nameNe": "गोकर्णेश्वर नगरपालिका",
+      "districtCode": "kathmandu",
+      "province": 3,
+      "type": "municipality",
+      "wardCount": 9
+    }
+  ],
+  "legacyVdcs": [
+    {
+      "nameEn": "Hemja",
+      "nameNe": "हेम्जा",
+      "districtCode": "kaski",
+      "localUnitCode": "kaski-pokhara"
+    },
+    {
+      "nameEn": "Sarangkot",
+      "nameNe": "सराङकोट",
+      "districtCode": "kaski",
+      "localUnitCode": "kaski-pokhara"
+    },
+    { "nameEn": "Bhalam", "nameNe": "भलाम", "districtCode": "kaski", "localUnitCode": null },
+    {
+      "nameEn": "Dhikurpokhari",
+      "nameNe": "धिकुरपोखरी",
+      "districtCode": "kaski",
+      "localUnitCode": "kaski-annapurna"
+    },
+    {
+      "nameEn": "Mangalpur",
+      "nameNe": "मंगलपुर",
+      "districtCode": "chitwan",
+      "localUnitCode": "chitwan-bharatpur"
+    },
+    {
+      "nameEn": "Gitanagar",
+      "nameNe": "गीतानगर",
+      "districtCode": "chitwan",
+      "localUnitCode": "chitwan-bharatpur"
+    },
+    {
+      "nameEn": "Patihani",
+      "nameNe": "पटिहानी",
+      "districtCode": "chitwan",
+      "localUnitCode": "chitwan-bharatpur"
+    },
+    {
+      "nameEn": "Sitapaila",
+      "nameNe": "सीतापाइला",
+      "districtCode": "kathmandu",
+      "localUnitCode": "kathmandu-nagarjun"
+    },
+    {
+      "nameEn": "Dahachok",
+      "nameNe": "दहचोक",
+      "districtCode": "kathmandu",
+      "localUnitCode": "kathmandu-chandragiri"
+    },
+    {
+      "nameEn": "Gokarna",
+      "nameNe": "गोकर्ण",
+      "districtCode": "kathmandu",
+      "localUnitCode": "kathmandu-gokarneshwor"
+    }
+  ]
+}

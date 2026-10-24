@@ -50,7 +50,7 @@ describe('pipeline', () => {
       const { total, loaded, quarantined } = production.counts;
       expect(total).toBe(1000);
       expect(loaded! + quarantined!).toBe(total);
-      expect(loaded).toBeGreaterThan(800);
+      expect(loaded).toBeGreaterThan(650);
     });
 
     it('writes one person and one lineage link per loaded row', async () => {
@@ -91,6 +91,68 @@ describe('pipeline', () => {
         expect(row.stage).toBe('transform');
         expect(JSON.stringify(row.reasons)).toContain('is not a real BS date');
       }
+    });
+
+    const quarantinedRows = async (rowNos: number[]) =>
+      (
+        await pool.query(
+          `SELECT r.row_no, q.stage, q.reasons FROM staging.quarantine q
+           JOIN staging.staged_rows s ON s.id = q.staged_row_id
+           JOIN staging.raw_rows r ON r.id = s.raw_row_id
+           WHERE r.run_id = $1 AND r.row_no = ANY($2) ORDER BY r.row_no`,
+          [production.runId, rowNos],
+        )
+      ).rows;
+
+    it('loads households in the local unit that replaced their VDC, headed by a member', async () => {
+      const { rows: households } = await pool.query(
+        `SELECT h.local_unit_code, h.ward_no, h.head_person_id,
+                (SELECT count(*)::int FROM target.persons p WHERE p.household_id = h.id) members,
+                (SELECT p.household_id = h.id FROM target.persons p WHERE p.id = h.head_person_id) head_is_member
+         FROM target.households h WHERE h.created_by_run = $1`,
+        [production.runId],
+      );
+      expect(households.length).toBeGreaterThan(100);
+      for (const h of households) {
+        expect(h.members).toBeGreaterThan(0);
+        expect(h.head_is_member).toBe(true);
+      }
+      expect(new Set(households.map((h) => h.local_unit_code))).toEqual(
+        new Set([
+          'kaski-pokhara',
+          'kaski-annapurna',
+          'chitwan-bharatpur',
+          'kathmandu-nagarjun',
+          'kathmandu-chandragiri',
+          'kathmandu-gokarneshwor',
+        ]),
+      );
+      const homeless = await count(
+        pool,
+        'SELECT count(*)::int n FROM target.persons WHERE created_by_run = $1 AND household_id IS NULL',
+        [production.runId],
+      );
+      expect(homeless).toBe(0);
+    });
+
+    it('sends every row from a VDC that was split across local units to review', async () => {
+      const GABISA = register.header.indexOf('GABISA');
+      const split = register.rows
+        .filter((row) => /bhalam/i.test(row[GABISA]!))
+        .map((row) => Number(row[0]));
+      expect(split.length).toBeGreaterThan(0);
+      const rows = await quarantinedRows(split);
+      expect(rows.map((r) => r.row_no)).toEqual(split);
+      for (const row of rows) expect(JSON.stringify(row.reasons)).toContain('needs review');
+    });
+
+    it('quarantines every row whose ward is outside its VDC or local unit', async () => {
+      const planted = register.truth.anomalies
+        .filter((a) => a.kind === 'invalid_ward')
+        .map((a) => a.row);
+      expect(planted.length).toBeGreaterThan(0);
+      const rows = await quarantinedRows(planted);
+      expect(rows.map((r) => r.row_no)).toEqual([...new Set(planted)]);
     });
 
     it('holds a second record with an already-loaded citizenship number for review', async () => {

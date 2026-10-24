@@ -17,6 +17,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "npm run build && node --env-file=.env dist/prisma/seed.js",
+    "db:reference": "npm run build && node --env-file=.env dist/prisma/reference/load-reference.js",
     "postinstall": "prisma generate",
     "generate:data": "npm run build && node dist/tools/generate-legacy-data.js",
     "tamper-demo": "npm run build && node --env-file=.env dist/tools/tamper-demo.js",

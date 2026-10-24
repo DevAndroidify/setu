@@ -1,0 +1,18 @@
+{
+  "about": "Legacy VDC addresses as clerks wrote them (district + VDC) and the local unit each must map to. null = the VDC must go to review.",
+  "cases": [
+    { "input": "Kaski Hemja", "localUnit": "kaski-pokhara" },
+    { "input": "KASKI HEMJA", "localUnit": "kaski-pokhara" },
+    { "input": "Kaski Hemja VDC", "localUnit": "kaski-pokhara" },
+    { "input": "kaski  Sarangkot Gabisa", "localUnit": "kaski-pokhara" },
+    { "input": "Kaski Dhikurpokhari ", "localUnit": "kaski-annapurna" },
+    { "input": "Chitwan Mangalpur", "localUnit": "chitwan-bharatpur" },
+    { "input": "CHITWAN Gitanagar VDC", "localUnit": "chitwan-bharatpur" },
+    { "input": "Chitwan PATIHANI", "localUnit": "chitwan-bharatpur" },
+    { "input": "Kathmandu Sitapaila", "localUnit": "kathmandu-nagarjun" },
+    { "input": "Kathmandu Dahachok Gabisa", "localUnit": "kathmandu-chandragiri" },
+    { "input": "KATHMANDU GOKARNA", "localUnit": "kathmandu-gokarneshwor" },
+    { "input": "Kaski Bhalam", "localUnit": null },
+    { "input": "KASKI BHALAM VDC", "localUnit": null }
+  ]
+}

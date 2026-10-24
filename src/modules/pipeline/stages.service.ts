@@ -5,13 +5,19 @@ import { ENV } from '../../shared/config/config.module';
 import type { Env } from '../../shared/config/env.schema';
 import { AuditService } from '../audit';
 import { LineageService } from '../lineage/lineage.service';
-import { CompiledMapping, MappingsService, transformRow, validateRow } from '../mappings';
+import {
+  CompiledMapping,
+  MappingsService,
+  NormalizedRow,
+  transformRow,
+  validateRow,
+} from '../mappings';
 import { QuarantineService } from '../quarantine/quarantine.service';
 import type { FieldValues, LoadedPair } from '../reconciliation/reconcile';
 import { ReconciliationService } from '../reconciliation/reconciliation.service';
 import { RawRow, SourcesService } from '../sources';
-import { PersonValues, TargetService } from '../target/target.service';
-import { PersonField, todayInNepal } from '../validation';
+import { RowValues, TargetService } from '../target/target.service';
+import { todayInNepal } from '../validation';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineRepository, RunCounts, Tx } from './pipeline.repository';
 
@@ -134,7 +140,7 @@ export class StagesService {
       const failed = (await this.repo.stagedRowsForBatch(tx, batch.id, 'valid'))
         .map((s) => ({
           s,
-          errors: validateRow(s.normalized as Record<PersonField, string | null>, mapping, ctx),
+          errors: validateRow(s.normalized as NormalizedRow, mapping, ctx),
         }))
         .filter((r) => r.errors.length);
       await this.repo.setStagedStatus(
@@ -150,11 +156,16 @@ export class StagesService {
     });
   }
 
-  /** Load: insert persons and their lineage in one transaction. */
+  /**
+   * Load: insert persons, households and lineage in one transaction. A run's batches load one
+   * at a time: batches loading together could each miss the other's citizenship numbers and
+   * households, collide, and fail again on every retry.
+   */
   load(batchId: string): Promise<void> {
     return this.runStage('load', batchId, async (tx, batch, run) => {
+      await this.repo.lockRun(tx, run.id, 'load');
       const staged = await this.repo.stagedRowsForBatch(tx, batch.id, 'valid');
-      const values = (s: (typeof staged)[number]) => s.normalized as PersonValues;
+      const values = (s: (typeof staged)[number]) => s.normalized as RowValues;
 
       // A citizenship number already in target (or twice in this batch) is a possible duplicate
       // person: hold it for review instead of loading a second record.
@@ -242,13 +253,22 @@ export class StagesService {
       quarantined: staged.quarantined,
       valid: staged.valid,
     };
-    const report = await this.reconcile(run, total, staged);
+    const loaded = run.mode === 'production' ? await this.repo.loadedRows(run.id) : [];
+    const report = await this.reconcile(run, total, staged, loaded);
     await this.repo.transaction(async (tx) => {
       const completed = await this.repo.transition(tx, runId, ['running'], 'completed', {
         finishedAt: new Date(),
         counts,
       });
       if (completed) {
+        await this.target.setHouseholdHeads(
+          tx,
+          runId,
+          loaded.map((r) => ({
+            rawRowId: r.rawRowId,
+            householdNo: (r.normalized as RowValues).household_no ?? null,
+          })),
+        );
         await this.reconciliation.save(tx, runId, report);
         await this.audit.append(
           {
@@ -269,12 +289,12 @@ export class StagesService {
     run: Run,
     extractedRows: number,
     statusCounts: Awaited<ReturnType<PipelineRepository['stagedCounts']>>,
+    loaded: Awaited<ReturnType<PipelineRepository['loadedRows']>>,
   ) {
     const file = await this.sources.getFile(run.sourceFileId);
     const pairs: LoadedPair[] = [];
     if (run.mode === 'production') {
-      const [loaded, personOf, stored] = await Promise.all([
-        this.repo.loadedRows(run.id),
+      const [personOf, stored] = await Promise.all([
         this.lineage.personsForRun(run.id),
         this.target.valuesForRun(run.id),
       ]);
@@ -356,8 +376,9 @@ export class StagesService {
   private async mapping(id: string): Promise<CompiledMapping> {
     let compiled = this.compiled.get(id);
     if (!compiled) {
-      // Mapping versions never change, so caching by id is safe.
-      compiled = this.mappings.compile(await this.mappings.get(id));
+      // Mapping versions never change, so caching by id is safe. Reference data is read once
+      // per worker process: restart workers after loading new reference data.
+      compiled = await this.mappings.compile(await this.mappings.get(id));
       this.compiled.set(id, compiled);
     }
     return compiled;

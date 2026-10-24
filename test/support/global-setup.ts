@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer } from '@testcontainers/redis';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
+import { loadReferenceData } from '../../prisma/reference/load-reference';
 
 // Same images as docker-compose.yml, so tests run against what developers run locally.
 const MINIO_IMAGE = 'pgsty/minio:RELEASE.2026-08-04T00-00-00Z';
@@ -14,7 +16,8 @@ declare global {
 }
 
 /**
- * Starts throwaway Postgres, Redis and MinIO containers, applies the migrations and exports
+ * Starts throwaway Postgres, Redis and MinIO containers, applies the migrations, loads the
+ * address reference data and exports
  * the connection settings as environment variables for the test files.
  */
 export default async function globalSetup(): Promise<void> {
@@ -49,4 +52,10 @@ export default async function globalSetup(): Promise<void> {
     env: process.env,
     stdio: 'pipe',
   });
+  const prisma = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
+  try {
+    await loadReferenceData(prisma);
+  } finally {
+    await prisma.$disconnect();
+  }
 }

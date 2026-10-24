@@ -57,7 +57,8 @@ ask before changing the design.
   (integration and e2e start their own Postgres, Redis and MinIO with Testcontainers; Docker must run)
 - Lint and types: `npm run lint && npm run typecheck`
 - Format: `npm run format` (CI runs `npm run format:check`)
-- Database: `npm run db:migrate` (new migration), `npm run db:deploy` (apply), `npm run db:seed`
-  (one demo user per role, e.g. `operator@setu.local`, password from `SEED_PASSWORD`)
+- Database: `npm run db:migrate` (new migration), `npm run db:deploy` (apply), `npm run db:reference`
+  (address reference data), `npm run db:seed`
+  (reference data plus one demo user per role, e.g. `operator@setu.local`, password from `SEED_PASSWORD`)
 - Synthetic data: `npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252|utf8`
 - Audit tamper demo: `npm run tamper-demo -- --stream global --seq 2`, then `GET /api/v1/audit/verify`
