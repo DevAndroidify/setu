@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { FEMALE, MALE, SURNAMES } from '../../../tools/generate-legacy-data';
 import { jaroWinkler } from './jaro-winkler';
-import { AUTO_LINK, bestMatch, blockKey, compare, MatchRecord, REVIEW } from './score';
+import { AUTO_LINK, bestMatch, blockKey, compare, MatchRecord, prepare, REVIEW } from './score';
 import { transliterate } from './transliterate';
 
 describe('jaroWinkler', () => {
@@ -123,16 +123,42 @@ describe('compare', () => {
 
 describe('bestMatch and blockKey', () => {
   it('returns the highest-scoring candidate above the review threshold, or null', () => {
-    const near = { id: 1, record: person({ father_name_ne: 'श्याम थापा' }) };
-    const exact = { id: 2, record: person() };
-    const far = { id: 3, record: person({ name_ne: 'सीता मगर', name_en: 'Sita Magar' }) };
-    expect(bestMatch(person(), [near, exact, far])?.candidate.id).toBe(2);
-    expect(bestMatch(person(), [far])).toBeNull();
+    const near = { id: 1, prepared: prepare(person({ father_name_ne: 'श्याम थापा' })) };
+    const exact = { id: 2, prepared: prepare(person()) };
+    const far = {
+      id: 3,
+      prepared: prepare(person({ name_ne: 'सीता मगर', name_en: 'Sita Magar' })),
+    };
+    expect(bestMatch(prepare(person()), [near, exact, far])?.candidate.id).toBe(2);
+    expect(bestMatch(prepare(person()), [far])).toBeNull();
   });
 
-  it('blocks by district and birth year, and not at all without a date of birth', () => {
-    expect(blockKey('kaski', '1988-04-12')).toBe('kaski|1988');
-    expect(blockKey(null, '1988-04-12')).toBe('?|1988');
+  it('blocks by district and date of birth, and not at all without a date of birth', () => {
+    expect(blockKey('kaski', '1988-04-12')).toBe('kaski|1988-04-12');
+    expect(blockKey(null, '1988-04-12')).toBe('?|1988-04-12');
     expect(blockKey('kaski', null)).toBeNull();
+  });
+
+  // What makes blocking by exact date safe: such a pair could never reach review anyway.
+  it('never scores a pair with different birth dates for review unless they share a number', () => {
+    const name = fc.constantFrom(
+      ...[...MALE, ...FEMALE].flatMap((g) => SURNAMES.map((s) => `${g.ne} ${s.ne}`)),
+    );
+    const record = fc.record({
+      name_ne: name,
+      name_en: fc.string(),
+      dob_ad: fc
+        .date({ min: new Date('1940-01-01'), max: new Date('2025-12-31'), noInvalidDate: true })
+        .map((d) => d.toISOString().slice(0, 10)),
+      father_name_ne: fc.option(name, { nil: null }),
+      citizenship_no: fc.constant(null),
+    });
+    fc.assert(
+      fc.property(record, record, (a, b) => {
+        fc.pre(a.dob_ad !== b.dob_ad);
+        expect(compare(a, b).score).toBeLessThan(REVIEW);
+      }),
+      { numRuns: 1000 },
+    );
   });
 });

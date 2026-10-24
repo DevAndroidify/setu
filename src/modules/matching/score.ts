@@ -35,27 +35,47 @@ const plain = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim()
 const givenName = (ne: string): string => transliterate(ne).split(' ')[0] ?? '';
 
 /**
- * Blocking key: only records in the same district and birth year are compared, which keeps
- * the comparisons per row small instead of comparing every pair. No date of birth, no block.
+ * Blocking key: only records in the same district born on the same day are compared, instead
+ * of every pair. The block can be this narrow without losing a match: two records with
+ * different birth dates score at most name + father = 0.75, below REVIEW, so they could never
+ * match by score (a shared citizenship number is compared separately, across blocks). It was
+ * district + birth year until the 100,000-row load test (docs/adr/0006). No date, no block.
  */
 export function blockKey(district: string | null, dobAd: string | null): string | null {
   if (!dobAd) return null;
-  return `${district ?? '?'}|${dobAd.slice(0, 4)}`;
+  return `${district ?? '?'}|${dobAd}`;
+}
+
+/** A record with its comparison forms worked out once, not once per pair. */
+export type PreparedRecord = {
+  nameNe: string;
+  nameEn: string;
+  father: string | null;
+  dob: string | null;
+  citizenship: string | null;
+};
+
+export function prepare(r: MatchRecord): PreparedRecord {
+  return {
+    nameNe: transliterate(r.name_ne),
+    nameEn: plain(r.name_en),
+    father: r.father_name_ne ? givenName(r.father_name_ne) : null,
+    dob: r.dob_ad,
+    citizenship: r.citizenship_no,
+  };
 }
 
 export function compare(a: MatchRecord, b: MatchRecord): MatchResult {
-  const name = Math.max(
-    jaroWinkler(transliterate(a.name_ne), transliterate(b.name_ne)),
-    jaroWinkler(plain(a.name_en), plain(b.name_en)),
-  );
-  const dob = a.dob_ad && b.dob_ad ? (a.dob_ad === b.dob_ad ? 1 : 0) : 0.5;
-  const father =
-    a.father_name_ne && b.father_name_ne
-      ? jaroWinkler(givenName(a.father_name_ne), givenName(b.father_name_ne))
-      : 0.5;
+  return comparePrepared(prepare(a), prepare(b));
+}
+
+export function comparePrepared(a: PreparedRecord, b: PreparedRecord): MatchResult {
+  const name = Math.max(jaroWinkler(a.nameNe, b.nameNe), jaroWinkler(a.nameEn, b.nameEn));
+  const dob = a.dob && b.dob ? (a.dob === b.dob ? 1 : 0) : 0.5;
+  const father = a.father && b.father ? jaroWinkler(a.father, b.father) : 0.5;
   const citizenship =
-    a.citizenship_no && b.citizenship_no
-      ? a.citizenship_no === b.citizenship_no
+    a.citizenship && b.citizenship
+      ? a.citizenship === b.citizenship
         ? 'same'
         : 'different'
       : 'unknown';
@@ -74,13 +94,13 @@ export function compare(a: MatchRecord, b: MatchRecord): MatchResult {
 }
 
 /** The best-scoring candidate at or above the review threshold; ties go to the earliest. */
-export function bestMatch<C extends { record: MatchRecord }>(
-  record: MatchRecord,
+export function bestMatch<C extends { prepared: PreparedRecord }>(
+  record: PreparedRecord,
   candidates: C[],
 ): (MatchResult & { candidate: C }) | null {
   let best: (MatchResult & { candidate: C }) | null = null;
   for (const candidate of candidates) {
-    const result = compare(record, candidate.record);
+    const result = comparePrepared(record, candidate.prepared);
     if (result.score >= REVIEW && (!best || result.score > best.score)) {
       best = { ...result, candidate };
     }

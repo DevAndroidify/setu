@@ -1,4 +1,4 @@
-import { AUTO_LINK, bestMatch, MatchFeatures, MatchRecord } from './score';
+import { AUTO_LINK, bestMatch, MatchFeatures, MatchRecord, prepare, PreparedRecord } from './score';
 
 export type MatchInput = {
   id: bigint;
@@ -27,29 +27,33 @@ export type MatchOutcome =
  * compared only within their block, or when they share a citizenship number.
  */
 export function matchBatch(rows: MatchInput[], candidates: MatchCandidateInput[]): MatchOutcome[] {
-  const byBlock = new Map<string, MatchCandidateInput[]>();
-  const byCitizenship = new Map<string, MatchCandidateInput[]>();
-  const add = (c: MatchCandidateInput) => {
+  type Prepared = MatchCandidateInput & { prepared: PreparedRecord };
+  const byBlock = new Map<string, Prepared[]>();
+  const byCitizenship = new Map<string, Prepared[]>();
+  const add = (input: MatchCandidateInput, prepared = prepare(input.record)) => {
+    const c = { ...input, prepared };
     if (c.block) byBlock.set(c.block, [...(byBlock.get(c.block) ?? []), c]);
     const no = c.record.citizenship_no;
     if (no) byCitizenship.set(no, [...(byCitizenship.get(no) ?? []), c]);
   };
-  candidates.forEach(add);
+  for (const c of candidates) add(c);
 
   return rows.map((row): MatchOutcome => {
     const pool = new Set([
       ...(row.block ? (byBlock.get(row.block) ?? []) : []),
       ...(row.record.citizenship_no ? (byCitizenship.get(row.record.citizenship_no) ?? []) : []),
     ]);
-    const best = bestMatch(row.record, [...pool]);
+    const prepared = prepare(row.record);
+    const best = bestMatch(prepared, [...pool]);
     if (!best) {
-      add({ ...row, personId: null });
+      add({ ...row, personId: null }, prepared);
       return { row, kind: 'new' };
     }
+    const { prepared: _prepared, ...candidate } = best.candidate;
     return {
       row,
       kind: best.score >= AUTO_LINK ? 'link' : 'review',
-      candidate: best.candidate,
+      candidate,
       score: best.score,
       features: best.features,
     };
