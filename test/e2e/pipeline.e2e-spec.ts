@@ -5,7 +5,7 @@ import { encodeCp1252, generateRegister } from '../../tools/generate-legacy-data
 import { apiClient } from '../support/api-client';
 import { startApi } from '../support/app';
 import { createTestPool } from '../support/db';
-import { count, createRun, startWorker, waitForRun } from '../support/pipeline';
+import { count, createRun, startRun, startWorker, waitForRun } from '../support/pipeline';
 
 const register = generateRegister({ rows: 1000, seed: 4242, encoding: 'cp1252' });
 const bytes = encodeCp1252(register.csv);
@@ -36,7 +36,7 @@ describe('pipeline', () => {
       worker = await startWorker();
       // Every upload must be unique (sha256), so each run gets its own copy of the register.
       const { runId } = await createRun(api, operator, bytes, 'production');
-      await api.as(operator).post(`/runs/${runId}/start`).expect(202);
+      await startRun(api, operator, runId);
       const run = await waitForRun(pool, runId);
       production = { runId, counts: run.counts };
       expect(run.status).toBe('completed');
@@ -150,7 +150,7 @@ describe('pipeline', () => {
     it('validates a dry run without loading anything', async () => {
       const dry = generateRegister({ rows: 600, seed: 7, encoding: 'cp1252' });
       const { runId } = await createRun(api, operator, encodeCp1252(dry.csv), 'dry_run');
-      await api.as(operator).post(`/runs/${runId}/start`).expect(202);
+      await startRun(api, operator, runId);
       const run = await waitForRun(pool, runId);
 
       expect(run.status).toBe('completed');
@@ -208,7 +208,7 @@ describe('pipeline', () => {
     it('does no work while paused and finishes after resume', async () => {
       const data = generateRegister({ rows: 400, seed: 9, encoding: 'cp1252' });
       const { runId } = await createRun(api, operator, encodeCp1252(data.csv), 'production');
-      await api.as(operator).post(`/runs/${runId}/start`).expect(202);
+      await startRun(api, operator, runId);
       await api.as(operator).post(`/runs/${runId}/pause`).expect(200);
 
       const worker = await startWorker();
@@ -241,7 +241,7 @@ describe('pipeline', () => {
     it('never runs a cancelled run', async () => {
       const data = generateRegister({ rows: 200, seed: 11, encoding: 'cp1252' });
       const { runId } = await createRun(api, operator, encodeCp1252(data.csv), 'production');
-      await api.as(operator).post(`/runs/${runId}/start`).expect(202);
+      await startRun(api, operator, runId);
       await api.as(operator).post(`/runs/${runId}/cancel`).expect(200);
 
       const worker = await startWorker();

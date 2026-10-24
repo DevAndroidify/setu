@@ -4,7 +4,7 @@ import { encodeCp1252, generateRegister } from '../../tools/generate-legacy-data
 import { apiClient } from '../support/api-client';
 import { startApi } from '../support/app';
 import { createTestPool } from '../support/db';
-import { count, createRun, startWorker, waitForRun } from '../support/pipeline';
+import { count, createRun, startRun, startWorker, waitForRun } from '../support/pipeline';
 
 /** Everything in target, in a stable order, so two snapshots compare exactly. */
 async function snapshotTarget(pool: Pool) {
@@ -44,7 +44,7 @@ describe('reconciliation and rollback', () => {
   async function completedRun(seed: number, rows = 1000) {
     const register = generateRegister({ rows, seed, encoding: 'cp1252' });
     const { runId } = await createRun(api, operator, encodeCp1252(register.csv), 'production');
-    await api.as(operator).post(`/runs/${runId}/start`).expect(202);
+    await startRun(api, operator, runId);
     const run = await waitForRun(pool, runId);
     expect(run.status).toBe('completed');
     return { runId, counts: run.counts };

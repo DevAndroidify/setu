@@ -43,6 +43,8 @@ enum RunMode {
 enum RunStatus {
   draft
   awaiting_approval
+  /// Approved by a checker; may be started until the approval expires.
+  approved
   queued
   running
   paused

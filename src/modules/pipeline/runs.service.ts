@@ -4,7 +4,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import type { Run, RunMode, RunStatus } from '@prisma/client';
+import type { Prisma, Run, RunMode, RunStatus } from '@prisma/client';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditService } from '../audit';
 import type { AuthUser } from '../auth';
 import { LineageService } from '../lineage/lineage.service';
@@ -27,6 +28,7 @@ export class RunsService {
     private readonly mappings: MappingsService,
     private readonly target: TargetService,
     private readonly lineage: LineageService,
+    private readonly approvals: ApprovalsService,
     private readonly audit: AuditService,
   ) {}
 
@@ -55,13 +57,23 @@ export class RunsService {
     });
   }
 
-  /** Queues the run. Starting a run that is already started changes nothing (double clicks). */
+  /**
+   * Queues the run. A production run must have a current approval from someone other than its
+   * maker. Starting a run that is already started changes nothing (double clicks).
+   */
   async start(id: string, user: AuthUser): Promise<Run> {
     const started = (r: Run) => ['queued', 'running', 'completed'].includes(r.status);
     const run = await this.get(id);
     if (started(run)) return run;
+    if (run.mode === 'production') await this.requireApproval(run, user);
     try {
-      await this.move(run, ['draft'], 'queued', user, 'run.started');
+      await this.move(
+        run,
+        [run.mode === 'production' ? 'approved' : 'draft'],
+        'queued',
+        user,
+        'run.started',
+      );
     } catch (err) {
       // A concurrent start won the race: that is the double click this endpoint absorbs.
       const now = await this.get(id);
@@ -70,6 +82,105 @@ export class RunsService {
     }
     await this.queue.extract(id);
     return this.get(id);
+  }
+
+  private async requireApproval(run: Run, user: AuthUser): Promise<void> {
+    if (run.status === 'draft' || run.status === 'awaiting_approval') {
+      throw new ConflictException(
+        'A production run needs approval before it can start: submit it first',
+      );
+    }
+    const approval = await this.approvals.usableApproval(run.id);
+    if (approval === 'expired') {
+      await this.move(run, ['approved'], 'draft', user, 'run.approval_expired', {
+        approvedBy: null,
+      });
+      throw new ConflictException('The approval expired after 24 hours: submit the run again');
+    }
+    if (approval === 'missing') throw new ConflictException('The run has no approval');
+  }
+
+  /** Maker: asks for a production run to be approved. */
+  async submit(id: string, user: AuthUser): Promise<Run> {
+    const run = await this.get(id);
+    if (run.mode !== 'production') throw new ConflictException('Dry runs do not need approval');
+    await this.repo.transaction(async (tx) => {
+      if (!(await this.repo.transition(tx, id, ['draft'], 'awaiting_approval'))) {
+        throw new ConflictException(`A ${run.status} run cannot be submitted`);
+      }
+      const request = await this.approvals.request(tx, id, user.id);
+      await this.audit.append(
+        {
+          stream: runStream(id),
+          actorId: user.id,
+          action: 'run.submitted',
+          entity: 'run',
+          entityId: id,
+          payload: { approvalId: request.id, expiresAt: request.expiresAt },
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /**
+   * Checker: approves or rejects with a reason. Whoever created or submitted the run may not
+   * decide it (and the database refuses it too). A request older than 24 hours has expired.
+   */
+  async decide(
+    id: string,
+    user: AuthUser,
+    decision: 'approved' | 'rejected',
+    reason: string,
+  ): Promise<Run> {
+    const run = await this.get(id);
+    const expired = await this.repo.transaction(async (tx) => {
+      const pending = await this.approvals.pendingFor(id, user.id, [run.createdBy], tx);
+      if (pending === 'expired') {
+        await this.repo.transition(tx, id, ['awaiting_approval'], 'draft');
+        await this.audit.append(
+          {
+            stream: runStream(id),
+            actorId: user.id,
+            action: 'run.approval_expired',
+            entity: 'run',
+            entityId: id,
+          },
+          tx,
+        );
+        return true;
+      }
+      await this.approvals.decide(tx, pending, user.id, decision, reason);
+      const to = decision === 'approved' ? 'approved' : 'draft';
+      const extra = decision === 'approved' ? { approvedBy: user.id } : {};
+      if (!(await this.repo.transition(tx, id, ['awaiting_approval'], to, extra))) {
+        throw new ConflictException(`A ${run.status} run cannot be ${decision}`);
+      }
+      await this.audit.append(
+        {
+          stream: runStream(id),
+          actorId: user.id,
+          action: decision === 'approved' ? 'run.approved' : 'run.rejected',
+          entity: 'run',
+          entityId: id,
+          payload: { approvalId: pending.id },
+          reason,
+        },
+        tx,
+      );
+      return false;
+    });
+    // Outside the transaction, so the expiry above is committed rather than rolled back.
+    if (expired)
+      throw new ConflictException(
+        'The approval request expired after 24 hours: submit the run again',
+      );
+    return this.get(id);
+  }
+
+  approvalHistory(id: string) {
+    return this.approvals.history(id);
   }
 
   async pause(id: string, user: AuthUser): Promise<Run> {
@@ -90,7 +201,7 @@ export class RunsService {
   async cancel(id: string, user: AuthUser): Promise<Run> {
     await this.move(
       await this.get(id),
-      ['draft', 'queued', 'running', 'paused'],
+      ['draft', 'awaiting_approval', 'approved', 'queued', 'running', 'paused'],
       'cancelled',
       user,
       'run.cancelled',
@@ -176,15 +287,19 @@ export class RunsService {
     };
   }
 
-  private async move(run: Run, from: RunStatus[], to: RunStatus, user: AuthUser, action: string) {
+  private async move(
+    run: Run,
+    from: RunStatus[],
+    to: RunStatus,
+    user: AuthUser,
+    action: string,
+    extra: Prisma.RunUncheckedUpdateManyInput = {},
+  ) {
     await this.repo.transaction(async (tx) => {
-      const moved = await this.repo.transition(
-        tx,
-        run.id,
-        from,
-        to,
-        to === 'cancelled' ? { finishedAt: new Date() } : {},
-      );
+      const moved = await this.repo.transition(tx, run.id, from, to, {
+        ...(to === 'cancelled' ? { finishedAt: new Date() } : {}),
+        ...extra,
+      });
       if (!moved) {
         throw new ConflictException(`A ${run.status} run cannot be moved to ${to}`);
       }

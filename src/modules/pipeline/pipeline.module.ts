@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ApprovalsModule } from '../approvals/approvals.module';
 import { AuditModule } from '../audit/audit.module';
 import { LineageModule } from '../lineage/lineage.module';
 import { MappingsModule } from '../mappings/mappings.module';
@@ -14,6 +15,7 @@ import { StagesService } from './stages.service';
 
 @Module({
   imports: [
+    ApprovalsModule,
     AuditModule,
     SourcesModule,
     MappingsModule,

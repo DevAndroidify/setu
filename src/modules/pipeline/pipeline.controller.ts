@@ -4,6 +4,12 @@ import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { type AuthUser, CurrentUser, Roles } from '../auth';
 import { type CreateRunRequest, RunsService } from './runs.service';
 
+const decisionSchema = z.object({
+  decision: z.enum(['approved', 'rejected']),
+  reason: z.string().trim().min(3, 'a reason is required').max(1000),
+});
+type DecisionRequest = z.infer<typeof decisionSchema>;
+
 const createRunSchema = z.object({
   sourceFileId: z.uuid(),
   mappingId: z.uuid(),
@@ -29,6 +35,31 @@ export class PipelineController {
   @HttpCode(202)
   start(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.runs.start(id, user);
+  }
+
+  /** Maker: ask for a production run to be approved. */
+  @Roles('operator')
+  @Post(':id/submit')
+  @HttpCode(200)
+  submit(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
+    return this.runs.submit(id, user);
+  }
+
+  /** Checker: approve or reject with a reason. */
+  @Roles('approver')
+  @Post(':id/approve')
+  @HttpCode(200)
+  approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(decisionSchema)) body: DecisionRequest,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.runs.decide(id, user, body.decision, body.reason);
+  }
+
+  @Get(':id/approvals')
+  approvals(@Param('id', ParseUUIDPipe) id: string) {
+    return this.runs.approvalHistory(id);
   }
 
   @Roles('operator', 'admin')

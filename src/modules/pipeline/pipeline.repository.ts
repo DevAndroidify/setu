@@ -44,7 +44,7 @@ export class PipelineRepository {
     id: string,
     from: RunStatus[],
     to: RunStatus,
-    extra: Prisma.RunUpdateManyMutationInput = {},
+    extra: Prisma.RunUncheckedUpdateManyInput = {},
   ): Promise<boolean> {
     const { count } = await tx.run.updateMany({
       where: { id, status: { in: from } },

@@ -28,6 +28,26 @@ export async function createRun(
   return { runId: run.body.id, fileId, mappingId: mapping.body.id };
 }
 
+/**
+ * Starts a run the way a real team would: a production run is first submitted by the
+ * operator and approved by a different user with the approver role.
+ */
+export async function startRun(api: Api, operatorToken: string, runId: string): Promise<void> {
+  const run = await api.as(operatorToken).get(`/runs/${runId}`).expect(200);
+  if (run.body.mode === 'production') {
+    await api.as(operatorToken).post(`/runs/${runId}/submit`).expect(200);
+    const approver = (await api.login('approver')).token;
+    await api
+      .as(approver)
+      .post(`/runs/${runId}/approve`, {
+        decision: 'approved',
+        reason: 'Checked the dry run report',
+      })
+      .expect(200);
+  }
+  await api.as(operatorToken).post(`/runs/${runId}/start`).expect(202);
+}
+
 /** Polls the run until it reaches one of the given statuses. */
 export async function waitForRun(
   pool: Pool,

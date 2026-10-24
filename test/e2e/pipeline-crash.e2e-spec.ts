@@ -7,7 +7,7 @@ import { encodeCp1252, generateRegister } from '../../tools/generate-legacy-data
 import { apiClient } from '../support/api-client';
 import { startApi } from '../support/app';
 import { createTestPool } from '../support/db';
-import { count, createRun, startWorker, waitForRun } from '../support/pipeline';
+import { count, createRun, startRun, startWorker, waitForRun } from '../support/pipeline';
 
 // Small batches, short locks: the crashed worker's jobs come back within seconds.
 const CRASH_ENV = {
@@ -49,7 +49,7 @@ describe('pipeline crash recovery', () => {
       env: { ...process.env, ...CRASH_ENV, LOG_LEVEL: 'error' },
       stdio: 'ignore',
     });
-    await api.as(operator).post(`/runs/${runId}/start`).expect(202);
+    await startRun(api, operator, runId);
 
     const doneBatches = () =>
       count(
