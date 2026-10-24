@@ -70,9 +70,9 @@ describe('pipeline crash recovery', () => {
     const run = await waitForRun(pool, runId, ['completed', 'failed'], 120_000);
     expect(run.status).toBe('completed');
 
-    const { total, loaded, quarantined } = run.counts;
+    const { total, loaded, linked, quarantined, review } = run.counts;
     expect(total).toBe(ROWS);
-    expect(loaded! + quarantined!).toBe(ROWS);
+    expect(loaded! + linked! + quarantined! + review!).toBe(ROWS);
 
     const q = (sql: string) => count(pool, sql, [runId]);
     expect(await q('SELECT count(*)::int n FROM staging.raw_rows WHERE run_id = $1')).toBe(ROWS);
@@ -83,7 +83,9 @@ describe('pipeline crash recovery', () => {
     expect(await q('SELECT count(*)::int n FROM target.persons WHERE created_by_run = $1')).toBe(
       loaded,
     );
-    expect(await q('SELECT count(*)::int n FROM target.lineage WHERE run_id = $1')).toBe(loaded);
+    expect(await q('SELECT count(*)::int n FROM target.lineage WHERE run_id = $1')).toBe(
+      loaded! + linked!,
+    );
     expect(
       await q(`SELECT count(*)::int n FROM (
                  SELECT raw_row_id FROM target.lineage WHERE run_id = $1

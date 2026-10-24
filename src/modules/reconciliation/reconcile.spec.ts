@@ -25,7 +25,7 @@ const input = (overrides: Partial<Parameters<typeof buildReport>[0]> = {}) => ({
   mode: 'production' as const,
   profiledRows: 110,
   extractedRows: 110,
-  statusCounts: { valid: 0, quarantined: 10, duplicate_review: 0, loaded: 100 },
+  statusCounts: { valid: 0, quarantined: 10, duplicate_review: 0, loaded: 100, linked: 0 },
   pairs: pairs(100),
   ...overrides,
 });
@@ -87,7 +87,7 @@ describe('buildReport', () => {
       input({
         mode: 'dry_run',
         pairs: [],
-        statusCounts: { valid: 100, quarantined: 10, duplicate_review: 0, loaded: 0 },
+        statusCounts: { valid: 100, quarantined: 10, duplicate_review: 0, loaded: 0, linked: 0 },
       }),
     );
     expect(report).toMatchObject({ ok: true, checksums: null, sample: null });
@@ -114,7 +114,7 @@ describe('reportToCsv', () => {
       buildReport(
         input({
           pairs: evil,
-          statusCounts: { valid: 0, quarantined: 109, duplicate_review: 0, loaded: 1 },
+          statusCounts: { valid: 0, quarantined: 109, duplicate_review: 0, loaded: 1, linked: 0 },
         }),
       ),
     );

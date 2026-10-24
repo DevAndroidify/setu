@@ -24,11 +24,18 @@ export class LineageService {
     return new Map(links.map((l) => [l.rawRowId, l.targetId]));
   }
 
+  /** raw row id -> the person each given row produced or was linked to. */
+  async personsForRawRows(rawRowIds: bigint[]): Promise<Map<bigint, string>> {
+    const links = await this.repo.forRawRows(rawRowIds);
+    return new Map(links.map((l) => [l.rawRowId, l.targetId]));
+  }
+
   deleteForBatch(tx: Prisma.TransactionClient, batchId: string): Promise<string[]> {
     return this.repo.deleteForBatch(tx, batchId);
   }
 
-  linkedFromOtherRuns(runId: string): Promise<boolean> {
-    return this.repo.linkedFromOtherRuns(runId);
+  /** True if another run has linked to one of these records, which the run created. */
+  linkedFromOtherRuns(runId: string, createdIds: string[]): Promise<boolean> {
+    return this.repo.linkedFromOtherRuns(runId, createdIds);
   }
 }

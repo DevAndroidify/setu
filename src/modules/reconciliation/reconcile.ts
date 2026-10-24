@@ -18,7 +18,13 @@ export type ReconcileInput = {
   /** Rows the profiler counted when the file was uploaded: an independent count. */
   profiledRows: number | null;
   extractedRows: number;
-  statusCounts: { valid: number; quarantined: number; duplicate_review: number; loaded: number };
+  statusCounts: {
+    valid: number;
+    quarantined: number;
+    duplicate_review: number;
+    loaded: number;
+    linked: number;
+  };
   pairs: LoadedPair[];
 };
 
@@ -30,6 +36,8 @@ export type ReconciliationReport = {
     profiled: number | null;
     extracted: number;
     loaded: number;
+    /** Rows that are a person already in target: lineage only, no new record. */
+    linked: number;
     quarantined: number;
     pendingReview: number;
     /** Valid but not loaded (dry runs). */
@@ -86,7 +94,9 @@ export function buildReport(input: ReconcileInput): ReconciliationReport {
     );
   }
   const accounted =
-    (input.mode === 'production' ? s.loaded : s.valid) + s.quarantined + s.duplicate_review;
+    (input.mode === 'production' ? s.loaded + s.linked : s.valid) +
+    s.quarantined +
+    s.duplicate_review;
   const balanced =
     accounted === extractedRows &&
     (input.profiledRows === null || input.profiledRows === extractedRows);
@@ -133,6 +143,7 @@ export function buildReport(input: ReconcileInput): ReconciliationReport {
       profiled: input.profiledRows,
       extracted: extractedRows,
       loaded: s.loaded,
+      linked: s.linked,
       quarantined: s.quarantined,
       pendingReview: s.duplicate_review,
       valid: s.valid,
@@ -160,6 +171,7 @@ export function reportToCsv(report: ReconciliationReport): string {
   rows.push(['counts', 'profiled', c.profiled, '', '']);
   rows.push(['counts', 'extracted', c.extracted, '', '']);
   rows.push(['counts', 'loaded', c.loaded, '', '']);
+  rows.push(['counts', 'linked to existing', c.linked, '', '']);
   rows.push(['counts', 'quarantined', c.quarantined, '', '']);
   rows.push(['counts', 'pending review', c.pendingReview, '', '']);
   rows.push(['counts', 'valid (not loaded)', c.valid, '', '']);

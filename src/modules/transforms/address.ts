@@ -8,9 +8,15 @@ export type AddressReference = {
   /** Normalized "district vdc" -> local unit code, or null when the VDC needs review. */
   vdcs: ReadonlyMap<string, string | null>;
   wardCounts: ReadonlyMap<string, number>;
+  /** Local unit code -> district code, for blocking duplicates by district. */
+  districts: ReadonlyMap<string, string>;
 };
 
-export const EMPTY_ADDRESS_REFERENCE: AddressReference = { vdcs: new Map(), wardCounts: new Map() };
+export const EMPTY_ADDRESS_REFERENCE: AddressReference = {
+  vdcs: new Map(),
+  wardCounts: new Map(),
+  districts: new Map(),
+};
 
 /** Lower-cases, collapses spaces and drops the "VDC" / "V.D.C." / "Gabisa" suffix clerks add. */
 export function placeKey(text: string): string {
@@ -24,12 +30,13 @@ export function placeKey(text: string): string {
 }
 
 export function buildAddressReference(
-  units: { code: string; wardCount: number }[],
+  units: { code: string; wardCount: number; districtCode: string }[],
   vdcs: { districtCode: string; nameEn: string; localUnitCode: string | null }[],
 ): AddressReference {
   return {
     vdcs: new Map(vdcs.map((v) => [placeKey(`${v.districtCode} ${v.nameEn}`), v.localUnitCode])),
     wardCounts: new Map(units.map((u) => [u.code, u.wardCount])),
+    districts: new Map(units.map((u) => [u.code, u.districtCode])),
   };
 }
 

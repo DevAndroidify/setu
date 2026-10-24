@@ -28,4 +28,16 @@ export class PipelineQueueService {
       { jobId: batchJobId(batch.stage, batch.id) },
     );
   }
+
+  /**
+   * Wakes a batch that is waiting for the batch before it to finish matching. Its own match job
+   * may still be finishing, so this job gets an id of its own instead of being deduplicated.
+   */
+  async matchAfter(batch: Pick<Batch, 'id' | 'runId'>, previousBatchId: string): Promise<void> {
+    await this.queues.match.add(
+      'match',
+      { runId: batch.runId, batchId: batch.id },
+      { jobId: `${batchJobId('match', batch.id)}-after-${previousBatchId}` },
+    );
+  }
 }

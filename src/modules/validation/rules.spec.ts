@@ -2,7 +2,10 @@ import { buildAddressReference } from '../transforms';
 import { compileRule, Rule, todayInNepal } from './rules';
 
 const ctx = { today: '2026-10-24' };
-const ref = buildAddressReference([{ code: 'kaski-pokhara', wardCount: 33 }], []);
+const ref = buildAddressReference(
+  [{ code: 'kaski-pokhara', wardCount: 33, districtCode: 'kaski' }],
+  [],
+);
 const rule = (spec: string): Rule => {
   const compiled = compileRule(spec, ref);
   if (typeof compiled !== 'function') throw new Error(compiled.error);

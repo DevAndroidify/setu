@@ -30,7 +30,9 @@ export class TargetRepository {
 
   async addressReference() {
     const [units, vdcs] = await Promise.all([
-      this.prisma.localUnit.findMany({ select: { code: true, wardCount: true } }),
+      this.prisma.localUnit.findMany({
+        select: { code: true, wardCount: true, districtCode: true },
+      }),
       this.prisma.legacyVdc.findMany({
         select: { districtCode: true, nameEn: true, localUnitCode: true },
       }),
@@ -72,9 +74,11 @@ export class TargetRepository {
     return this.prisma.person.findMany({ where: { createdByRun: runId } });
   }
 
-  async deletePersons(tx: Tx, ids: string[]): Promise<number> {
+  async deletePersons(tx: Tx, ids: string[], runId: string): Promise<number> {
     if (ids.length === 0) return 0;
-    const { count } = await tx.person.deleteMany({ where: { id: { in: ids } } });
+    const { count } = await tx.person.deleteMany({
+      where: { id: { in: ids }, createdByRun: runId },
+    });
     return count;
   }
 

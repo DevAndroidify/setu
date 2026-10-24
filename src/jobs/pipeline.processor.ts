@@ -32,6 +32,7 @@ export class PipelineProcessor implements OnModuleInit, OnModuleDestroy {
     this.start<ExtractJob>(QUEUES.extract, (job) => this.stages.extract(job.data.runId), 1);
     this.start<BatchJob>(QUEUES.transform, (job) => this.stages.transform(job.data.batchId));
     this.start<BatchJob>(QUEUES.validate, (job) => this.stages.validate(job.data.batchId));
+    this.start<BatchJob>(QUEUES.match, (job) => this.stages.match(job.data.batchId));
     this.start<BatchJob>(QUEUES.load, (job) => this.stages.load(job.data.batchId));
 
     this.sweeper = setInterval(() => {

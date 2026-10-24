@@ -6,6 +6,7 @@ export const QUEUES = {
   extract: 'pipeline-extract',
   transform: 'pipeline-transform',
   validate: 'pipeline-validate',
+  match: 'pipeline-match',
   load: 'pipeline-load',
 } as const;
 
@@ -17,7 +18,7 @@ export type BatchJob = { runId: string; batchId: string };
 export const PROFILE_QUEUE = Symbol('PROFILE_QUEUE');
 export type ProfileQueue = Queue<ProfileJob>;
 
-export type BatchStageName = 'transform' | 'validate' | 'load';
+export type BatchStageName = 'transform' | 'validate' | 'match' | 'load';
 
 /** Producer side of the pipeline: the extract queue plus one queue per batch stage. */
 export const PIPELINE_QUEUES = Symbol('PIPELINE_QUEUES');

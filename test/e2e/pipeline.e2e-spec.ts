@@ -46,14 +46,14 @@ describe('pipeline', () => {
       await worker.close();
     });
 
-    it('accounts for every row: loaded + quarantined = total', () => {
-      const { total, loaded, quarantined } = production.counts;
+    it('accounts for every row: loaded + linked + quarantined + held for review = total', () => {
+      const { total, loaded, linked, quarantined, review } = production.counts;
       expect(total).toBe(1000);
-      expect(loaded! + quarantined!).toBe(total);
+      expect(loaded! + linked! + quarantined! + review!).toBe(total);
       expect(loaded).toBeGreaterThan(650);
     });
 
-    it('writes one person and one lineage link per loaded row', async () => {
+    it('writes one person per loaded row and one lineage link per loaded or linked row', async () => {
       const { runId, counts } = production;
       const persons = await count(
         pool,
@@ -71,8 +71,8 @@ describe('pipeline', () => {
         [runId],
       );
       expect(persons).toBe(counts.loaded);
-      expect(lineage).toBe(counts.loaded);
-      expect(distinctRows).toBe(counts.loaded);
+      expect(lineage).toBe(counts.loaded! + counts.linked!);
+      expect(distinctRows).toBe(counts.loaded! + counts.linked!);
     });
 
     it('quarantines every row with a planted impossible date, with the reason', async () => {
@@ -155,7 +155,9 @@ describe('pipeline', () => {
       expect(rows.map((r) => r.row_no)).toEqual([...new Set(planted)]);
     });
 
-    it('holds a second record with an already-loaded citizenship number for review', async () => {
+    it('never loads two persons with the same citizenship number', async () => {
+      // The generator re-enters some people with their citizenship number: the matcher links
+      // them, so no load has to turn one away.
       const { rows } = await pool.query(
         `SELECT count(*)::int n FROM staging.quarantine q
          JOIN staging.staged_rows s ON s.id = q.staged_row_id
@@ -163,8 +165,8 @@ describe('pipeline', () => {
          WHERE r.run_id = $1 AND q.stage = 'load'`,
         [production.runId],
       );
-      // The generator re-enters some people with their citizenship number.
-      expect(rows[0].n).toBeGreaterThan(0);
+      expect(rows[0].n).toBe(0);
+      expect(production.counts.linked).toBeGreaterThan(0);
     });
 
     it('lists quarantined rows with their raw values and reasons', async () => {
@@ -287,7 +289,8 @@ describe('pipeline', () => {
         await api.as(operator).post(`/runs/${runId}/resume`).expect(202);
         const done = await waitForRun(pool, runId);
         expect(done.status).toBe('completed');
-        expect(done.counts.loaded! + done.counts.quarantined!).toBe(400);
+        const { loaded, linked, quarantined, review } = done.counts;
+        expect(loaded! + linked! + quarantined! + review!).toBe(400);
       } finally {
         await worker.close();
       }

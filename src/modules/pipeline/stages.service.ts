@@ -12,11 +12,19 @@ import {
   transformRow,
   validateRow,
 } from '../mappings';
+import {
+  blockKey,
+  matchBatch,
+  MatchCandidateInput,
+  MatchingService,
+  MatchRecord,
+} from '../matching';
 import { QuarantineService } from '../quarantine/quarantine.service';
 import type { FieldValues, LoadedPair } from '../reconciliation/reconcile';
 import { ReconciliationService } from '../reconciliation/reconciliation.service';
 import { RawRow, SourcesService } from '../sources';
-import { RowValues, TargetService } from '../target/target.service';
+import { personIdFor, RowValues, TargetService } from '../target/target.service';
+import type { AddressReference } from '../transforms';
 import { todayInNepal } from '../validation';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineRepository, RunCounts, Tx } from './pipeline.repository';
@@ -34,6 +42,7 @@ type StageWork = (tx: Tx, batch: Batch, run: Run) => Promise<BatchStage>;
 export class StagesService {
   private readonly logger = new Logger(StagesService.name);
   private readonly compiled = new Map<string, CompiledMapping>();
+  private reference?: Promise<AddressReference>;
 
   constructor(
     private readonly repo: PipelineRepository,
@@ -43,6 +52,7 @@ export class StagesService {
     private readonly quarantine: QuarantineService,
     private readonly target: TargetService,
     private readonly lineage: LineageService,
+    private readonly matching: MatchingService,
     private readonly reconciliation: ReconciliationService,
     private readonly audit: AuditService,
     @Inject(ENV) private readonly env: Env,
@@ -152,7 +162,84 @@ export class StagesService {
         tx,
         failed.map((f) => ({ stagedRowId: f.s.id, stage: 'validate', reasons: f.errors })),
       );
-      return run.mode === 'dry_run' ? 'done' : 'load'; // dry runs stop before loading
+      return run.mode === 'dry_run' ? 'done' : 'match'; // dry runs stop before matching
+    });
+  }
+
+  /**
+   * Match: compares each valid row with earlier rows of the run and with persons already in
+   * target, within its block (district + birth year) or by citizenship number. Batches match
+   * in order, so "earlier" means earlier in the file and the result does not depend on timing:
+   * a batch whose predecessor is still matching waits and is woken when it finishes.
+   */
+  match(batchId: string): Promise<void> {
+    return this.runStage('match', batchId, async (tx, batch, run) => {
+      if (await this.repo.earlierBatchesUnmatched(tx, run.id, batch.seq)) return 'match';
+
+      const ref = await this.addressReference();
+      const toInput = (s: { id: bigint; rawRowId: bigint; normalized: unknown }) => {
+        const values = s.normalized as RowValues;
+        const district = values.local_unit_code
+          ? (ref.districts.get(values.local_unit_code) ?? null)
+          : null;
+        return {
+          id: s.id,
+          rawRowId: s.rawRowId,
+          block: blockKey(district, values.dob_ad),
+          record: values as MatchRecord,
+        };
+      };
+      const rows = (await this.repo.stagedRowsForBatch(tx, batch.id, 'valid')).map(toInput);
+      const found = await this.repo.matchCandidates(
+        tx,
+        run.id,
+        [...new Set(rows.map((r) => r.block).filter((b): b is string => b !== null))],
+        rows.map((r) => r.record.citizenship_no).filter((n): n is string => !!n),
+      );
+      const persons = await this.lineage.personsForRawRows(
+        found.filter((c) => c.status === 'loaded').map((c) => c.rawRowId),
+      );
+      const candidates: MatchCandidateInput[] = found.map((c) => ({
+        ...toInput({ id: c.stagedRowId, rawRowId: c.rawRowId, normalized: c.normalized }),
+        personId: persons.get(c.rawRowId) ?? null,
+      }));
+      const outcomes = matchBatch(rows, candidates);
+
+      await this.repo.setBlockKeys(
+        tx,
+        rows.map((r) => ({ id: r.id, key: r.block })),
+      );
+      const matched = outcomes.filter((o) => o.kind !== 'new');
+      await this.matching.record(
+        tx,
+        matched.map((o) => ({
+          rowA: o.row.id,
+          rowB: o.candidate.id,
+          score: o.score,
+          // The person the row would join: already in target, or an earlier row of this run
+          // that its load will create.
+          features: {
+            ...o.features,
+            personId: o.candidate.personId ?? personIdFor(o.candidate.rawRowId),
+          },
+          decision: o.kind === 'link' ? 'link' : 'pending',
+        })),
+      );
+      const ids = (kind: 'link' | 'review') =>
+        matched.filter((o) => o.kind === kind).map((o) => o.row.id);
+      await this.repo.setStagedStatus(tx, ids('link'), 'linked');
+      await this.repo.setStagedStatus(tx, ids('review'), 'duplicate_review');
+      await this.audit.append(
+        {
+          stream: runStream(run.id),
+          action: 'batch.matched',
+          entity: 'batch',
+          entityId: batch.id,
+          payload: { seq: batch.seq, linked: ids('link').length, review: ids('review').length },
+        },
+        tx,
+      );
+      return 'load';
     });
   }
 
@@ -164,6 +251,7 @@ export class StagesService {
   load(batchId: string): Promise<void> {
     return this.runStage('load', batchId, async (tx, batch, run) => {
       await this.repo.lockRun(tx, run.id, 'load');
+      await this.linkMatchedRows(tx, batch, run);
       const staged = await this.repo.stagedRowsForBatch(tx, batch.id, 'valid');
       const values = (s: (typeof staged)[number]) => s.normalized as RowValues;
 
@@ -239,6 +327,26 @@ export class StagesService {
     });
   }
 
+  /** Rows the matcher linked to an existing person get lineage to that person, not a new one. */
+  private async linkMatchedRows(tx: Tx, batch: Batch, run: Run): Promise<void> {
+    const linked = await this.repo.stagedRowsForBatch(tx, batch.id, 'linked');
+    const personOf = await this.matching.linkedPersons(
+      tx,
+      linked.map((s) => s.id),
+    );
+    await this.lineage.record(
+      tx,
+      linked.map((s) => ({
+        targetTable: 'persons',
+        targetId: personOf.get(s.id)!,
+        rawRowId: s.rawRowId,
+        mappingId: run.mappingId,
+        runId: run.id,
+        batchId: batch.id,
+      })),
+    );
+  }
+
   /** Completes the run once every batch is done and the extract has counted all rows. */
   async finalizeIfDone(runId: string): Promise<void> {
     const run = await this.repo.findRun(runId);
@@ -247,10 +355,12 @@ export class StagesService {
     if ((await this.repo.countUnfinishedBatches(runId)) > 0) return;
 
     const staged = await this.repo.stagedCounts(runId);
-    const counts = {
+    const counts: RunCounts = {
       total,
       loaded: staged.loaded,
+      linked: staged.linked,
       quarantined: staged.quarantined,
+      review: staged.duplicate_review,
       valid: staged.valid,
     };
     const loaded = run.mode === 'production' ? await this.repo.loadedRows(run.id) : [];
@@ -361,12 +471,28 @@ export class StagesService {
       const run = await this.repo.findRun(batch.runId, tx);
       if (!run || run.status !== 'running') return null; // paused or cancelled: resume re-queues
       const nextStage = await work(tx, batch, run);
+      if (nextStage === stage) return null; // waiting for an earlier batch
       await this.repo.setStage(tx, batch.id, nextStage);
       return { ...batch, stage: nextStage };
     });
     if (!next) return;
+    if (stage === 'match') await this.wakeNextMatch(next);
     if (next.stage === 'done') await this.finalizeIfDone(next.runId);
     else await this.queue.batch(next);
+  }
+
+  /** The next batch may be waiting for this one to finish matching. */
+  private async wakeNextMatch(batch: Batch): Promise<void> {
+    const after = await this.repo.transaction((tx) =>
+      this.repo.nextBatch(tx, batch.runId, batch.seq),
+    );
+    if (after?.stage === 'match') await this.queue.matchAfter(after, batch.id);
+  }
+
+  /** Read once per worker process, like compiled mappings. */
+  private addressReference(): Promise<AddressReference> {
+    this.reference ??= this.target.addressReference();
+    return this.reference;
   }
 
   private async isRunning(runId: string): Promise<boolean> {

@@ -57,6 +57,11 @@ export class TargetService {
     return this.repo.existingCitizenshipNos(tx, numbers);
   }
 
+  /** Ids of the persons a run created (not the ones it only linked to). */
+  async personIdsCreatedByRun(runId: string): Promise<string[]> {
+    return (await this.repo.personsCreatedByRun(runId)).map((p) => p.id);
+  }
+
   /** person id -> stored values, read back from target for reconciliation. */
   async valuesForRun(runId: string): Promise<Map<string, PersonValues>> {
     const persons = await this.repo.personsCreatedByRun(runId);
@@ -75,8 +80,9 @@ export class TargetService {
     );
   }
 
-  deletePersons(tx: Tx, ids: string[]): Promise<number> {
-    return this.repo.deletePersons(tx, ids);
+  /** Deletes the given persons that this run created; persons it only linked to stay. */
+  deletePersons(tx: Tx, ids: string[], runId: string): Promise<number> {
+    return this.repo.deletePersons(tx, ids, runId);
   }
 
   /** After a rollback has removed the run's persons, removes the households it created. */

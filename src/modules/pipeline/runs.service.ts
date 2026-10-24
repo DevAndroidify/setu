@@ -220,7 +220,7 @@ export class RunsService {
     if (!['completed', 'cancelled', 'failed'].includes(run.status)) {
       throw new ConflictException(`A ${run.status} run cannot be rolled back`);
     }
-    if (await this.lineage.linkedFromOtherRuns(id)) {
+    if (await this.lineage.linkedFromOtherRuns(id, await this.target.personIdsCreatedByRun(id))) {
       throw new ConflictException(
         'Later runs have linked to records from this run; roll those back first',
       );
@@ -231,7 +231,7 @@ export class RunsService {
       await this.repo.transaction(async (tx) => {
         const personIds = await this.lineage.deleteForBatch(tx, batch.id);
         if (personIds.length === 0) return;
-        const deleted = await this.target.deletePersons(tx, personIds);
+        const deleted = await this.target.deletePersons(tx, personIds, id);
         await this.repo.unloadBatch(tx, batch.id);
         await this.audit.append(
           {

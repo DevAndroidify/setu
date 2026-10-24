@@ -59,6 +59,7 @@ class QueueShutdown implements OnApplicationShutdown {
         extract: createQueue(env, QUEUES.extract, PIPELINE_JOB_OPTIONS),
         transform: createQueue(env, QUEUES.transform, PIPELINE_JOB_OPTIONS),
         validate: createQueue(env, QUEUES.validate, PIPELINE_JOB_OPTIONS),
+        match: createQueue(env, QUEUES.match, PIPELINE_JOB_OPTIONS),
         load: createQueue(env, QUEUES.load, PIPELINE_JOB_OPTIONS),
       }),
     },

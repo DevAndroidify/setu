@@ -70,6 +70,8 @@ enum BatchStage {
   extract
   transform
   validate
+  /// Production runs only: compare against earlier rows and target persons, in batch order.
+  match
   load
   done
 
@@ -276,6 +278,8 @@ enum StagedStatus {
   quarantined
   duplicate_review
   loaded
+  /// The matcher (or a reviewer) decided the row is a person already in target.
+  linked
 
   @@schema("staging")
 }
@@ -314,6 +318,8 @@ model StagedRow {
   normalized Json
   warnings   Json         @default("[]")
   status     StagedStatus
+  /// District and birth year, set by the match stage; rows are only compared within a block.
+  blockKey   String?      @map("block_key")
 
   rawRow     RawRow           @relation(fields: [rawRowId], references: [id])
   quarantine Quarantine[]
@@ -321,6 +327,7 @@ model StagedRow {
   matchesB   MatchCandidate[] @relation("MatchRowB")
 
   @@index([status])
+  @@index([blockKey])
   @@map("staged_rows")
   @@schema("staging")
 }

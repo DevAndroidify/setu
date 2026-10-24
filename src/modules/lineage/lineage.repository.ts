@@ -31,6 +31,14 @@ export class LineageRepository {
     });
   }
 
+  forRawRows(rawRowIds: bigint[]): Promise<{ rawRowId: bigint; targetId: string }[]> {
+    if (rawRowIds.length === 0) return Promise.resolve([]);
+    return this.prisma.lineage.findMany({
+      where: { rawRowId: { in: rawRowIds }, targetTable: 'persons' },
+      select: { rawRowId: true, targetId: true },
+    });
+  }
+
   /** Deletes a batch's links and returns the target ids they pointed to. */
   async deleteForBatch(tx: Prisma.TransactionClient, batchId: string): Promise<string[]> {
     const links = await tx.lineage.findMany({
@@ -41,13 +49,13 @@ export class LineageRepository {
     return links.map((l) => l.targetId);
   }
 
-  /** True if another run has linked to any record this run created. */
-  async linkedFromOtherRuns(runId: string): Promise<boolean> {
+  /** True if another run has linked to any of the given records (created by this run). */
+  async linkedFromOtherRuns(runId: string, targetIds: string[]): Promise<boolean> {
+    if (targetIds.length === 0) return false;
     const rows = await this.prisma.$queryRaw<{ linked: boolean }[]>`
       SELECT EXISTS (
         SELECT 1 FROM target.lineage other
-        WHERE other.run_id <> ${runId}::uuid
-          AND other.target_id IN (SELECT target_id FROM target.lineage WHERE run_id = ${runId}::uuid)
+        WHERE other.run_id <> ${runId}::uuid AND other.target_id = ANY(${targetIds}::uuid[])
       ) AS linked`;
     return rows[0]?.linked ?? false;
   }
