@@ -31,12 +31,12 @@ export class LineageRepository {
     });
   }
 
+  /** One array parameter, not one per id: the list can outgrow Postgres's 32,767 binds. */
   forRawRows(rawRowIds: bigint[]): Promise<{ rawRowId: bigint; targetId: string }[]> {
     if (rawRowIds.length === 0) return Promise.resolve([]);
-    return this.prisma.lineage.findMany({
-      where: { rawRowId: { in: rawRowIds }, targetTable: 'persons' },
-      select: { rawRowId: true, targetId: true },
-    });
+    return this.prisma.$queryRaw`
+      SELECT raw_row_id AS "rawRowId", target_id AS "targetId" FROM target.lineage
+      WHERE target_table = 'persons' AND raw_row_id = ANY(${rawRowIds}::bigint[])`;
   }
 
   forTarget(targetTable: string, targetId: string) {

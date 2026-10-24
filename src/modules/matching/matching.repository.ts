@@ -31,15 +31,17 @@ export class MatchingRepository {
     return tx.matchCandidate.findMany({ where: { rowA: { in: rowIds }, decision: 'link' } });
   }
 
-  pending(limit: number, afterId?: bigint, rowIds?: bigint[]): Promise<MatchCandidate[]> {
+  /** Pending candidates in id order, optionally only those of the given rows (any number). */
+  async pending(limit: number, afterId?: bigint, rowIds?: bigint[]): Promise<MatchCandidate[]> {
+    if (rowIds?.length === 0) return [];
+    const ids = await this.prisma.$queryRaw<{ id: bigint }[]>`
+      SELECT id FROM staging.match_candidates
+      WHERE decision = 'pending' AND id > ${afterId ?? 0n}
+        AND (${rowIds ?? null}::bigint[] IS NULL OR row_a = ANY(${rowIds ?? null}::bigint[]))
+      ORDER BY id LIMIT ${limit}`;
     return this.prisma.matchCandidate.findMany({
-      where: {
-        decision: 'pending',
-        ...(afterId ? { id: { gt: afterId } } : {}),
-        ...(rowIds ? { rowA: { in: rowIds } } : {}),
-      },
+      where: { id: { in: ids.map((r) => r.id) } },
       orderBy: { id: 'asc' },
-      take: limit,
     });
   }
 
