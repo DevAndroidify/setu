@@ -9,6 +9,10 @@ export const envSchema = z.object({
   S3_ENDPOINT: z.string().url(),
   S3_ACCESS_KEY: z.string().min(1),
   S3_SECRET_KEY: z.string().min(1),
+  S3_BUCKET: z.string().min(3).default('setu-sources'),
+  JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(7),
 });
 
 export type Env = z.infer<typeof envSchema>;

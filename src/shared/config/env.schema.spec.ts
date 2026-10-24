@@ -6,6 +6,7 @@ const valid = {
   S3_ENDPOINT: 'http://localhost:9000',
   S3_ACCESS_KEY: 'key',
   S3_SECRET_KEY: 'secret',
+  JWT_SECRET: 'x'.repeat(32),
 };
 
 describe('loadEnv', () => {
@@ -27,6 +28,10 @@ describe('loadEnv', () => {
 
   it('rejects a port outside the valid range', () => {
     expect(() => loadEnv({ ...valid, API_PORT: '70000' })).toThrow(/API_PORT/);
+  });
+
+  it('rejects a JWT secret shorter than 32 characters', () => {
+    expect(() => loadEnv({ ...valid, JWT_SECRET: 'short' })).toThrow(/JWT_SECRET/);
   });
 
   it('does not put secret values in the error message', () => {
