@@ -16,8 +16,8 @@ async function bootstrap(): Promise<void> {
     await app.close();
     process.exit(1);
   }
-  // No queue processors yet (they arrive in the pipeline phase). The open Redis connection keeps the process alive.
-  logger.log('started, dependencies ready');
+  // Queue processors (src/jobs) start with the module and keep the process alive.
+  logger.log('started, dependencies ready, processing queues');
 }
 
 void bootstrap();

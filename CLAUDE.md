@@ -54,5 +54,10 @@ ask before changing the design.
 - Run API: `npm run start:api`
 - Run worker: `npm run start:worker`
 - Tests: `npm test` (unit), `npm run test:int` (integration), `npm run test:e2e`
+  (integration and e2e start their own Postgres, Redis and MinIO with Testcontainers; Docker must run)
 - Lint and types: `npm run lint && npm run typecheck`
 - Format: `npm run format` (CI runs `npm run format:check`)
+- Database: `npm run db:migrate` (new migration), `npm run db:deploy` (apply), `npm run db:seed`
+  (one demo user per role, e.g. `operator@setu.local`, password from `SEED_PASSWORD`)
+- Synthetic data: `npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252|utf8`
+- Audit tamper demo: `npm run tamper-demo -- --stream global --seq 2`, then `GET /api/v1/audit/verify`
