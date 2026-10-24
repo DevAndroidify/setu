@@ -5,6 +5,17 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { Prisma, Run, RunMode, RunStatus } from '@prisma/client';
+import {
+  concat,
+  concatMap,
+  distinctUntilChanged,
+  interval,
+  map,
+  merge,
+  Observable,
+  of,
+  takeWhile,
+} from 'rxjs';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditService } from '../audit';
 import type { AuthUser } from '../auth';
@@ -14,6 +25,7 @@ import { SourcesService } from '../sources';
 import { TargetService } from '../target/target.service';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineRepository, RunCounts } from './pipeline.repository';
+import { RunEventsService } from './run-events.service';
 import { runStream } from './stages.service';
 
 export type CreateRunRequest = { sourceFileId: string; mappingId: string; mode: RunMode };
@@ -30,6 +42,7 @@ export class RunsService {
     private readonly lineage: LineageService,
     private readonly approvals: ApprovalsService,
     private readonly audit: AuditService,
+    private readonly runEvents: RunEventsService,
   ) {}
 
   async create(input: CreateRunRequest, user: AuthUser): Promise<Run> {
@@ -263,6 +276,7 @@ export class RunsService {
         tx,
       );
     });
+    await this.runEvents.publish(id, { type: 'run', status: 'rolled_back' });
     return this.get(id);
   }
 
@@ -288,6 +302,24 @@ export class RunsService {
     };
   }
 
+  /**
+   * Live progress for Server-Sent Events: the run's status now, then again whenever the worker
+   * reports progress (and every 5 seconds in case an event was lost), until the run ends.
+   */
+  async events(id: string): Promise<Observable<{ data: unknown }>> {
+    await this.get(id); // 404 before the stream starts
+    const ended = (status: string) =>
+      ['completed', 'failed', 'cancelled', 'rolled_back'].includes(status);
+    // Subscribed to the events before the first read, so nothing between the two is missed.
+    const triggers = merge(this.runEvents.stream(id), interval(5000));
+    return concat(of(null), triggers).pipe(
+      concatMap(() => this.status(id)),
+      distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      takeWhile((s) => !ended(s.status), true),
+      map((s) => ({ data: s })),
+    );
+  }
+
   private async move(
     run: Run,
     from: RunStatus[],
@@ -309,5 +341,6 @@ export class RunsService {
         tx,
       );
     });
+    await this.runEvents.publish(run.id, { type: 'run', status: to });
   }
 }

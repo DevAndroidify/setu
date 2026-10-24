@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  /** Write logs to this file instead of stdout (used by the log-privacy test). */
+  LOG_FILE: z.string().min(1).optional(),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
@@ -13,6 +15,10 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(7),
+  /** Requests per minute per IP address to /auth/*. */
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
+  /** Port of the worker's Prometheus endpoint; 0 picks a free port. */
+  WORKER_METRICS_PORT: z.coerce.number().int().min(0).max(65535).default(9464),
   // Pipeline tuning: measure with the load test before changing (docs/ARCHITECTURE.md).
   PIPELINE_BATCH_SIZE: z.coerce.number().int().min(1).max(10_000).default(1000),
   PIPELINE_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),

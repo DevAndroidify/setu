@@ -3,6 +3,7 @@ import type { Batch, BatchStage, Run } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { ENV } from '../../shared/config/config.module';
 import type { Env } from '../../shared/config/env.schema';
+import { Metrics } from '../../shared/metrics/metrics';
 import { AuditService } from '../audit';
 import { LineageService } from '../lineage/lineage.service';
 import {
@@ -28,10 +29,13 @@ import type { AddressReference } from '../transforms';
 import { todayInNepal } from '../validation';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineRepository, RunCounts, Tx } from './pipeline.repository';
+import { RunEventsService } from './run-events.service';
 
 export const runStream = (runId: string): string => `run:${runId}`;
 
-type StageWork = (tx: Tx, batch: Batch, run: Run) => Promise<BatchStage>;
+/** Counts rows by outcome for the setu_rows_processed_total metric. */
+type Tally = (status: string, rows: number) => void;
+type StageWork = (tx: Tx, batch: Batch, run: Run, tally: Tally) => Promise<BatchStage>;
 
 /**
  * The work of each pipeline stage, run by the worker. Every stage is one transaction that
@@ -55,6 +59,8 @@ export class StagesService {
     private readonly matching: MatchingService,
     private readonly reconciliation: ReconciliationService,
     private readonly audit: AuditService,
+    private readonly metrics: Metrics,
+    private readonly events: RunEventsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -105,12 +111,15 @@ export class StagesService {
       await this.repo.setStage(tx, b.id, 'transform');
       return { ...b, stage: 'transform' as const };
     });
+    if (batch.stage === 'transform') {
+      this.metrics.rowsProcessed.inc({ stage: 'extract', status: 'extracted' }, rows.length);
+    }
     await this.queue.batch(batch);
   }
 
   /** Transform: apply the pinned mapping's transform chains; failures go to quarantine. */
   transform(batchId: string): Promise<void> {
-    return this.runStage('transform', batchId, async (tx, batch, run) => {
+    return this.runStage('transform', batchId, async (tx, batch, run, tally) => {
       const mapping = await this.mapping(run.mappingId);
       const results = (await this.repo.rawRowsForBatch(tx, batch.id)).map((raw) => ({
         raw,
@@ -126,6 +135,8 @@ export class StagesService {
         })),
       );
       const failed = results.filter((r) => r.out.errors.length);
+      tally('valid', results.length - failed.length);
+      tally('quarantined', failed.length);
       if (failed.length) {
         const staged = await this.repo.stagedRowsForBatch(tx, batch.id, 'quarantined');
         const idOf = new Map(staged.map((s) => [s.rawRowId, s.id]));
@@ -144,15 +155,16 @@ export class StagesService {
 
   /** Validate: field rules and the entity schema; every failing reason is kept. */
   validate(batchId: string): Promise<void> {
-    return this.runStage('validate', batchId, async (tx, batch, run) => {
+    return this.runStage('validate', batchId, async (tx, batch, run, tally) => {
       const mapping = await this.mapping(run.mappingId);
       const ctx = { today: todayInNepal() };
-      const failed = (await this.repo.stagedRowsForBatch(tx, batch.id, 'valid'))
-        .map((s) => ({
-          s,
-          errors: validateRow(s.normalized as NormalizedRow, mapping, ctx),
-        }))
-        .filter((r) => r.errors.length);
+      const checked = (await this.repo.stagedRowsForBatch(tx, batch.id, 'valid')).map((s) => ({
+        s,
+        errors: validateRow(s.normalized as NormalizedRow, mapping, ctx),
+      }));
+      const failed = checked.filter((r) => r.errors.length);
+      tally('valid', checked.length - failed.length);
+      tally('quarantined', failed.length);
       await this.repo.setStagedStatus(
         tx,
         failed.map((f) => f.s.id),
@@ -173,7 +185,7 @@ export class StagesService {
    * a batch whose predecessor is still matching waits and is woken when it finishes.
    */
   match(batchId: string): Promise<void> {
-    return this.runStage('match', batchId, async (tx, batch, run) => {
+    return this.runStage('match', batchId, async (tx, batch, run, tally) => {
       if (await this.repo.earlierBatchesUnmatched(tx, run.id, batch.seq)) return 'match';
 
       const ref = await this.addressReference();
@@ -229,6 +241,9 @@ export class StagesService {
         matched.filter((o) => o.kind === kind).map((o) => o.row.id);
       await this.repo.setStagedStatus(tx, ids('link'), 'linked');
       await this.repo.setStagedStatus(tx, ids('review'), 'duplicate_review');
+      tally('new', rows.length - matched.length);
+      tally('linked', ids('link').length);
+      tally('review', ids('review').length);
       await this.audit.append(
         {
           stream: runStream(run.id),
@@ -249,7 +264,7 @@ export class StagesService {
    * households, collide, and fail again on every retry.
    */
   load(batchId: string): Promise<void> {
-    return this.runStage('load', batchId, async (tx, batch, run) => {
+    return this.runStage('load', batchId, async (tx, batch, run, tally) => {
       await this.repo.lockRun(tx, run.id, 'load');
       await this.linkMatchedRows(tx, batch, run);
       const staged = await this.repo.stagedRowsForBatch(tx, batch.id, 'valid');
@@ -313,6 +328,8 @@ export class StagesService {
         loadable.map((s) => s.id),
         'loaded',
       );
+      tally('loaded', loadable.length);
+      tally('quarantined', conflicts.length);
       await this.audit.append(
         {
           stream: runStream(run.id),
@@ -365,7 +382,7 @@ export class StagesService {
     };
     const loaded = run.mode === 'production' ? await this.repo.loadedRows(run.id) : [];
     const report = await this.reconcile(run, total, staged, loaded);
-    await this.repo.transaction(async (tx) => {
+    const done = await this.repo.transaction(async (tx) => {
       const completed = await this.repo.transition(tx, runId, ['running'], 'completed', {
         finishedAt: new Date(),
         counts,
@@ -391,7 +408,9 @@ export class StagesService {
           tx,
         );
       }
+      return completed;
     });
+    if (done) await this.events.publish(runId, { type: 'run', status: 'completed' });
   }
 
   /** Reconcile stage: staging against target, read back independently. */
@@ -430,12 +449,11 @@ export class StagesService {
   /** A job ran out of retries: the batch and its run are failed and the reason kept. */
   async fail(runId: string, batchId: string | undefined, error: string): Promise<void> {
     if (batchId) await this.repo.failBatch(batchId, error);
-    await this.repo.transaction(async (tx) => {
-      if (
-        await this.repo.transition(tx, runId, ['queued', 'running'], 'failed', {
-          finishedAt: new Date(),
-        })
-      ) {
+    const failed = await this.repo.transaction(async (tx) => {
+      const moved = await this.repo.transition(tx, runId, ['queued', 'running'], 'failed', {
+        finishedAt: new Date(),
+      });
+      if (moved) {
         await this.audit.append(
           {
             stream: runStream(runId),
@@ -447,7 +465,9 @@ export class StagesService {
           tx,
         );
       }
+      return moved;
     });
+    if (failed) await this.events.publish(runId, { type: 'run', status: 'failed' });
   }
 
   /**
@@ -465,17 +485,32 @@ export class StagesService {
 
   private async runStage(stage: BatchStage, batchId: string, work: StageWork): Promise<void> {
     await this.repo.heartbeat(batchId);
+    const timer = this.metrics.batchDuration.startTimer({ stage });
+    const rows: Record<string, number> = {};
+    const tally: Tally = (status, n) => {
+      if (n > 0) rows[status] = (rows[status] ?? 0) + n;
+    };
     const next = await this.repo.transaction(async (tx) => {
       const batch = await this.repo.lockBatch(tx, batchId);
       if (!batch || batch.stage !== stage) return null; // already done by an earlier attempt
       const run = await this.repo.findRun(batch.runId, tx);
       if (!run || run.status !== 'running') return null; // paused or cancelled: resume re-queues
-      const nextStage = await work(tx, batch, run);
+      const nextStage = await work(tx, batch, run, tally);
       if (nextStage === stage) return null; // waiting for an earlier batch
       await this.repo.setStage(tx, batch.id, nextStage);
       return { ...batch, stage: nextStage };
     });
     if (!next) return;
+    timer();
+    for (const [status, n] of Object.entries(rows)) {
+      this.metrics.rowsProcessed.inc({ stage, status }, n);
+    }
+    await this.events.publish(next.runId, {
+      type: 'stage',
+      batchId: next.id,
+      seq: next.seq,
+      stage: next.stage,
+    });
     if (stage === 'match') await this.wakeNextMatch(next);
     if (next.stage === 'done') await this.finalizeIfDone(next.runId);
     else await this.queue.batch(next);

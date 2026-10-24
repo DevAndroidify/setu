@@ -46,6 +46,9 @@ export default async function globalSetup(): Promise<void> {
     PIPELINE_BATCH_SIZE: '200',
     PIPELINE_SWEEP_MS: '1000',
     PIPELINE_STALE_SECONDS: '5',
+    // Many tests sign in from the same address; the rate-limit test lowers this itself.
+    AUTH_RATE_LIMIT_PER_MINUTE: '100000',
+    WORKER_METRICS_PORT: '0',
   });
 
   execFileSync(join(__dirname, '../../node_modules/.bin/prisma'), ['migrate', 'deploy'], {

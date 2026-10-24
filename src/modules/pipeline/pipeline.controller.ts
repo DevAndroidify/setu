@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Sse } from '@nestjs/common';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { type AuthUser, CurrentUser, Roles } from '../auth';
@@ -89,6 +89,12 @@ export class PipelineController {
   @HttpCode(200)
   rollback(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.runs.rollback(id, user);
+  }
+
+  /** Live progress as Server-Sent Events; the stream ends when the run does. */
+  @Sse(':id/events')
+  events(@Param('id', ParseUUIDPipe) id: string) {
+    return this.runs.events(id);
   }
 
   /** Any signed-in role may follow a run's status and counts. */

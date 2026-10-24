@@ -8,6 +8,7 @@ import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
+import { AuthRateLimitGuard } from './rate-limit.guard';
 import { RolesGuard } from './roles.guard';
 
 @Module({
@@ -26,6 +27,7 @@ import { RolesGuard } from './roles.guard';
   providers: [
     AuthService,
     AuthRepository,
+    AuthRateLimitGuard,
     // Order matters: authenticate first, then check the role.
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

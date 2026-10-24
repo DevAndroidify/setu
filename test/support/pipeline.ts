@@ -1,13 +1,16 @@
 import { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { Logger } from 'nestjs-pino';
 import { Pool } from 'pg';
 import { WorkerModule } from '../../apps/worker/worker.module';
 import spec from '../fixtures/mappings/household-register.v1.json';
 import { apiClient } from './api-client';
 
 /** Starts the worker app in this process (all queue processors and the sweeper). */
-export function startWorker(): Promise<INestApplicationContext> {
-  return NestFactory.createApplicationContext(WorkerModule, { logger: ['error'] });
+export async function startWorker(): Promise<INestApplicationContext> {
+  const worker = await NestFactory.createApplicationContext(WorkerModule, { bufferLogs: true });
+  worker.useLogger(worker.get(Logger));
+  return worker;
 }
 
 type Api = ReturnType<typeof apiClient>;

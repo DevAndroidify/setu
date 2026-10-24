@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { LineageLink, LineageRepository } from './lineage.repository';
 
@@ -28,6 +28,18 @@ export class LineageService {
   async personsForRawRows(rawRowIds: bigint[]): Promise<Map<bigint, string>> {
     const links = await this.repo.forRawRows(rawRowIds);
     return new Map(links.map((l) => [l.rawRowId, l.targetId]));
+  }
+
+  /** Every source row behind a person: the one that created it and any linked to it. */
+  async forPerson(personId: string) {
+    const links = await this.repo.forTarget('persons', personId);
+    if (links.length === 0) throw new NotFoundException('No lineage for this person');
+    return links.map((l) => ({
+      rawRowId: l.rawRowId.toString(),
+      runId: l.runId,
+      mappingId: l.mappingId,
+      batchId: l.batchId,
+    }));
   }
 
   deleteForBatch(tx: Prisma.TransactionClient, batchId: string): Promise<string[]> {

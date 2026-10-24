@@ -8,6 +8,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ENV } from '../../shared/config/config.module';
@@ -16,6 +17,7 @@ import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { AuthService } from './auth.service';
 import { type AuthUser, type IssuedTokens, type LoginRequest, loginSchema } from './auth.types';
 import { CurrentUser, Public } from './decorators';
+import { AuthRateLimitGuard } from './rate-limit.guard';
 
 export const REFRESH_COOKIE = 'setu_refresh';
 
@@ -27,6 +29,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('auth/login')
   @HttpCode(200)
   async login(
@@ -37,6 +40,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('auth/refresh')
   @HttpCode(200)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

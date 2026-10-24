@@ -39,6 +39,13 @@ export class LineageRepository {
     });
   }
 
+  forTarget(targetTable: string, targetId: string) {
+    return this.prisma.lineage.findMany({
+      where: { targetTable, targetId },
+      orderBy: { rawRowId: 'asc' },
+    });
+  }
+
   /** Deletes a batch's links and returns the target ids they pointed to. */
   async deleteForBatch(tx: Prisma.TransactionClient, batchId: string): Promise<string[]> {
     const links = await tx.lineage.findMany({

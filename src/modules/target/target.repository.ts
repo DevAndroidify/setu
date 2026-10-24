@@ -70,6 +70,31 @@ export class TargetRepository {
     return new Set(rows.map((r) => r.citizenshipNo!));
   }
 
+  /** Persons by name (English, case-insensitive, or Nepali) and local unit, in id order. */
+  searchPersons(filter: { q?: string; localUnit?: string }, limit: number, afterId?: string) {
+    return this.prisma.person.findMany({
+      where: {
+        ...(filter.q
+          ? {
+              OR: [
+                { nameEn: { contains: filter.q, mode: 'insensitive' } },
+                { nameNe: { contains: filter.q } },
+              ],
+            }
+          : {}),
+        ...(filter.localUnit ? { household: { localUnitCode: filter.localUnit } } : {}),
+        ...(afterId ? { id: { gt: afterId } } : {}),
+      },
+      orderBy: { id: 'asc' },
+      take: limit,
+      include: { household: true },
+    });
+  }
+
+  findPerson(id: string) {
+    return this.prisma.person.findUnique({ where: { id }, include: { household: true } });
+  }
+
   personsCreatedByRun(runId: string) {
     return this.prisma.person.findMany({ where: { createdByRun: runId } });
   }

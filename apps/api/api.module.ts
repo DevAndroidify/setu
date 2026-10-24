@@ -10,6 +10,8 @@ import { ProfilingModule } from '../../src/modules/profiling/profiling.module';
 import { SourcesModule } from '../../src/modules/sources/sources.module';
 import { ConfigModule } from '../../src/shared/config/config.module';
 import { DbModule } from '../../src/shared/db/db.module';
+import { LoggingModule } from '../../src/shared/logging/logging.module';
+import { MetricsModule } from '../../src/shared/metrics/metrics';
 import { QueueModule } from '../../src/shared/queue/queue.module';
 import { RedisModule } from '../../src/shared/queue/redis.module';
 import { StorageModule } from '../../src/shared/storage/storage.module';
@@ -17,6 +19,8 @@ import { StorageModule } from '../../src/shared/storage/storage.module';
 @Module({
   imports: [
     ConfigModule,
+    LoggingModule,
+    MetricsModule,
     DbModule,
     RedisModule,
     QueueModule,

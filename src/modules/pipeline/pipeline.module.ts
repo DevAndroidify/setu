@@ -13,6 +13,7 @@ import { MatchesController } from './matches.controller';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineController } from './pipeline.controller';
 import { PipelineRepository } from './pipeline.repository';
+import { RunEventsService } from './run-events.service';
 import { RunsService } from './runs.service';
 import { StagesService } from './stages.service';
 
@@ -33,6 +34,7 @@ import { StagesService } from './stages.service';
     RunsService,
     StagesService,
     MatchReviewService,
+    RunEventsService,
     PipelineQueueService,
     PipelineRepository,
   ],
