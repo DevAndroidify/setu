@@ -39,6 +39,10 @@ export default async function globalSetup(): Promise<void> {
     S3_ACCESS_KEY,
     S3_SECRET_KEY,
     JWT_SECRET: 'test_only_jwt_secret_0123456789abcdef',
+    // Small batches give every test run several batches; quick sweeps keep recovery fast.
+    PIPELINE_BATCH_SIZE: '200',
+    PIPELINE_SWEEP_MS: '1000',
+    PIPELINE_STALE_SECONDS: '5',
   });
 
   execFileSync(join(__dirname, '../../node_modules/.bin/prisma'), ['migrate', 'deploy'], {

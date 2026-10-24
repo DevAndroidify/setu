@@ -63,6 +63,19 @@ export function mapRow(
   mapping: CompiledMapping,
   ctx: RuleContext,
 ): MappedRow {
+  const transformed = transformRow(raw, mapping);
+  const failed = new Set(transformed.errors.map((e) => e.field));
+  const errors = [...transformed.errors, ...validateRow(transformed.values, mapping, ctx, failed)];
+  return { ...transformed, errors, status: errors.length ? 'quarantined' : 'valid' };
+}
+
+export type TransformedRow = Pick<MappedRow, 'values' | 'warnings' | 'errors'>;
+
+/** Transform stage: runs each field's transform chain. Errors here are transform failures. */
+export function transformRow(
+  raw: Record<string, string>,
+  mapping: CompiledMapping,
+): TransformedRow {
   const values = Object.fromEntries(PERSON_FIELDS.map((f) => [f, null])) as Record<
     PersonField,
     string | null
@@ -82,22 +95,35 @@ export function mapRow(
       continue;
     }
     values[f.field] = result.value === '' ? null : result.value;
-    warnings.push(
-      ...result.warnings.map((message) => ({
-        field: f.field,
-        stage: 'transform' as const,
-        message,
-      })),
-    );
+    for (const message of result.warnings) {
+      warnings.push({ field: f.field, stage: 'transform', message });
+    }
+  }
+  return { values, warnings, errors };
+}
+
+/**
+ * Validate stage: field rules, then the entity schema (required fields, enums, date format).
+ * Fields in `skip` already failed to transform and are not reported twice.
+ */
+export function validateRow(
+  values: Record<PersonField, string | null>,
+  mapping: CompiledMapping,
+  ctx: RuleContext,
+  skip: ReadonlySet<PersonField> = new Set(),
+): FieldIssue[] {
+  const errors: FieldIssue[] = [];
+  for (const f of mapping.fields) {
+    if (skip.has(f.field)) continue;
     for (const rule of f.rules) {
       const message = rule.check(values[f.field], ctx);
-      if (message)
+      if (message) {
         errors.push({ field: f.field, stage: 'validate', message: `${rule.spec}: ${message}` });
+      }
     }
   }
 
-  // Entity-level shape (required fields, enums, date format) for fields not already flagged.
-  const flagged = new Set(errors.map((e) => e.field));
+  const flagged = new Set([...skip, ...errors.map((e) => e.field)]);
   const shape = personSchema.safeParse(values);
   if (!shape.success) {
     for (const issue of shape.error.issues) {
@@ -108,6 +134,5 @@ export function mapRow(
       }
     }
   }
-
-  return { values, warnings, errors, status: errors.length ? 'quarantined' : 'valid' };
+  return errors;
 }

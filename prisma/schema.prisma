@@ -45,6 +45,8 @@ enum RunStatus {
   awaiting_approval
   queued
   running
+  paused
+  cancelled
   completed
   failed
   rolled_back
@@ -57,6 +59,17 @@ enum BatchStatus {
   running
   completed
   failed
+
+  @@schema("control")
+}
+
+/// Where a batch is in the pipeline: the next stage to run, or done.
+enum BatchStage {
+  extract
+  transform
+  validate
+  load
+  done
 
   @@schema("control")
 }
@@ -206,6 +219,7 @@ model Batch {
   seq         Int
   rowFrom     Int         @map("row_from")
   rowTo       Int         @map("row_to")
+  stage       BatchStage  @default(extract)
   status      BatchStatus @default(pending)
   attempts    Int         @default(0)
   error       String?
@@ -307,7 +321,8 @@ model Quarantine {
 
   stagedRow StagedRow @relation(fields: [stagedRowId], references: [id])
 
-  @@index([stagedRowId])
+  // One entry per row and stage, so a retried stage cannot quarantine a row twice.
+  @@unique([stagedRowId, stage])
   @@map("quarantine")
   @@schema("staging")
 }

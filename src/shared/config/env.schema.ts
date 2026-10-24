@@ -13,6 +13,14 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(7),
+  // Pipeline tuning: measure with the load test before changing (docs/ARCHITECTURE.md).
+  PIPELINE_BATCH_SIZE: z.coerce.number().int().min(1).max(10_000).default(1000),
+  PIPELINE_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
+  /** How long a worker holds a job before BullMQ treats it as stalled (crashed worker). */
+  PIPELINE_LOCK_MS: z.coerce.number().int().min(1000).default(30_000),
+  /** A batch whose stage has not been picked up for this long is queued again. */
+  PIPELINE_STALE_SECONDS: z.coerce.number().int().min(1).default(60),
+  PIPELINE_SWEEP_MS: z.coerce.number().int().min(500).default(15_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

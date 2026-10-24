@@ -1,0 +1,327 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Batch, BatchStage, Run } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { ENV } from '../../shared/config/config.module';
+import type { Env } from '../../shared/config/env.schema';
+import { AuditService } from '../audit';
+import { LineageService } from '../lineage/lineage.service';
+import { CompiledMapping, MappingsService, transformRow, validateRow } from '../mappings';
+import { QuarantineService } from '../quarantine/quarantine.service';
+import { RawRow, SourcesService } from '../sources';
+import { PersonValues, TargetService } from '../target/target.service';
+import { PersonField, todayInNepal } from '../validation';
+import { PipelineQueueService } from './pipeline-queue.service';
+import { PipelineRepository, RunCounts, Tx } from './pipeline.repository';
+
+export const runStream = (runId: string): string => `run:${runId}`;
+
+type StageWork = (tx: Tx, batch: Batch, run: Run) => Promise<BatchStage>;
+
+/**
+ * The work of each pipeline stage, run by the worker. Every stage is one transaction that
+ * first locks its batch and checks the batch is still at that stage, so a retried, duplicated
+ * or resumed job finds the work done and stops: re-running a batch never changes the result.
+ */
+@Injectable()
+export class StagesService {
+  private readonly logger = new Logger(StagesService.name);
+  private readonly compiled = new Map<string, CompiledMapping>();
+
+  constructor(
+    private readonly repo: PipelineRepository,
+    private readonly queue: PipelineQueueService,
+    private readonly sources: SourcesService,
+    private readonly mappings: MappingsService,
+    private readonly quarantine: QuarantineService,
+    private readonly target: TargetService,
+    private readonly lineage: LineageService,
+    private readonly audit: AuditService,
+    @Inject(ENV) private readonly env: Env,
+  ) {}
+
+  /** Streams the file into raw rows, one batch at a time, queuing each batch as it is cut. */
+  async extract(runId: string): Promise<void> {
+    const run = await this.repo.findRun(runId);
+    if (!run) return;
+    if (run.status === 'queued') {
+      await this.repo.transaction((tx) =>
+        this.repo.transition(tx, runId, ['queued'], 'running', { startedAt: new Date() }),
+      );
+    } else if (run.status !== 'running') {
+      return; // paused or cancelled before it started
+    }
+
+    const file = await this.sources.getFile(run.sourceFileId);
+    let seq = 0;
+    let total = 0;
+    let rows: RawRow[] = [];
+    for await (const row of await this.sources.readRows(file)) {
+      rows.push(row);
+      total += 1;
+      if (rows.length === this.env.PIPELINE_BATCH_SIZE) {
+        await this.extractBatch(runId, ++seq, rows);
+        rows = [];
+        if (!(await this.isRunning(runId))) return; // paused or cancelled between batches
+      }
+    }
+    if (rows.length) await this.extractBatch(runId, seq + 1, rows);
+    await this.repo.setCounts(runId, { total });
+    await this.finalizeIfDone(runId);
+  }
+
+  private async extractBatch(runId: string, seq: number, rows: RawRow[]): Promise<void> {
+    const batch = await this.repo.transaction(async (tx) => {
+      const b = await this.repo.upsertBatch(tx, runId, seq, rows[0]!.rowNo, rows.at(-1)!.rowNo);
+      if (b.stage !== 'extract') return b; // extracted before a pause or crash
+      await this.repo.insertRawRows(
+        tx,
+        rows.map((r) => ({
+          runId,
+          batchId: b.id,
+          rowNo: r.rowNo,
+          raw: r.values,
+          rowHash: createHash('sha256').update(JSON.stringify(r.values)).digest('hex'),
+        })),
+      );
+      await this.repo.setStage(tx, b.id, 'transform');
+      return { ...b, stage: 'transform' as const };
+    });
+    await this.queue.batch(batch);
+  }
+
+  /** Transform: apply the pinned mapping's transform chains; failures go to quarantine. */
+  transform(batchId: string): Promise<void> {
+    return this.runStage('transform', batchId, async (tx, batch, run) => {
+      const mapping = await this.mapping(run.mappingId);
+      const results = (await this.repo.rawRowsForBatch(tx, batch.id)).map((raw) => ({
+        raw,
+        out: transformRow(raw.raw as Record<string, string>, mapping),
+      }));
+      await this.repo.insertStagedRows(
+        tx,
+        results.map(({ raw, out }) => ({
+          rawRowId: raw.id,
+          normalized: out.values,
+          warnings: out.warnings,
+          status: out.errors.length ? 'quarantined' : 'valid',
+        })),
+      );
+      const failed = results.filter((r) => r.out.errors.length);
+      if (failed.length) {
+        const staged = await this.repo.stagedRowsForBatch(tx, batch.id, 'quarantined');
+        const idOf = new Map(staged.map((s) => [s.rawRowId, s.id]));
+        await this.quarantine.record(
+          tx,
+          failed.map((f) => ({
+            stagedRowId: idOf.get(f.raw.id)!,
+            stage: 'transform',
+            reasons: f.out.errors,
+          })),
+        );
+      }
+      return 'validate';
+    });
+  }
+
+  /** Validate: field rules and the entity schema; every failing reason is kept. */
+  validate(batchId: string): Promise<void> {
+    return this.runStage('validate', batchId, async (tx, batch, run) => {
+      const mapping = await this.mapping(run.mappingId);
+      const ctx = { today: todayInNepal() };
+      const failed = (await this.repo.stagedRowsForBatch(tx, batch.id, 'valid'))
+        .map((s) => ({
+          s,
+          errors: validateRow(s.normalized as Record<PersonField, string | null>, mapping, ctx),
+        }))
+        .filter((r) => r.errors.length);
+      await this.repo.setStagedStatus(
+        tx,
+        failed.map((f) => f.s.id),
+        'quarantined',
+      );
+      await this.quarantine.record(
+        tx,
+        failed.map((f) => ({ stagedRowId: f.s.id, stage: 'validate', reasons: f.errors })),
+      );
+      return run.mode === 'dry_run' ? 'done' : 'load'; // dry runs stop before loading
+    });
+  }
+
+  /** Load: insert persons and their lineage in one transaction. */
+  load(batchId: string): Promise<void> {
+    return this.runStage('load', batchId, async (tx, batch, run) => {
+      const staged = await this.repo.stagedRowsForBatch(tx, batch.id, 'valid');
+      const values = (s: (typeof staged)[number]) => s.normalized as PersonValues;
+
+      // A citizenship number already in target (or twice in this batch) is a possible duplicate
+      // person: hold it for review instead of loading a second record.
+      const numbers = staged.map((s) => values(s).citizenship_no).filter((n): n is string => !!n);
+      const taken = await this.target.existingCitizenshipNos(tx, numbers);
+      const seen = new Set<string>();
+      const conflicts: typeof staged = [];
+      const loadable: typeof staged = [];
+      for (const s of staged) {
+        const number = values(s).citizenship_no;
+        if (number && (taken.has(number) || seen.has(number))) {
+          conflicts.push(s);
+        } else {
+          if (number) seen.add(number);
+          loadable.push(s);
+        }
+      }
+      await this.repo.setStagedStatus(
+        tx,
+        conflicts.map((s) => s.id),
+        'quarantined',
+      );
+      await this.quarantine.record(
+        tx,
+        conflicts.map((s) => ({
+          stagedRowId: s.id,
+          stage: 'load',
+          reasons: [
+            {
+              field: 'citizenship_no',
+              stage: 'load',
+              message:
+                'citizenship number already belongs to another record; needs duplicate review',
+            },
+          ],
+        })),
+      );
+
+      const personIds = await this.target.insertPersons(
+        tx,
+        run.id,
+        loadable.map((s) => ({ rawRowId: s.rawRowId, values: values(s) })),
+      );
+      await this.lineage.record(
+        tx,
+        loadable.map((s) => ({
+          targetTable: 'persons',
+          targetId: personIds.get(s.rawRowId)!,
+          rawRowId: s.rawRowId,
+          mappingId: run.mappingId,
+          runId: run.id,
+          batchId: batch.id,
+        })),
+      );
+      await this.repo.setStagedStatus(
+        tx,
+        loadable.map((s) => s.id),
+        'loaded',
+      );
+      await this.audit.append(
+        {
+          stream: runStream(run.id),
+          action: 'batch.loaded',
+          entity: 'batch',
+          entityId: batch.id,
+          payload: { seq: batch.seq, loaded: loadable.length, quarantined: conflicts.length },
+        },
+        tx,
+      );
+      return 'done';
+    });
+  }
+
+  /** Completes the run once every batch is done and the extract has counted all rows. */
+  async finalizeIfDone(runId: string): Promise<void> {
+    const run = await this.repo.findRun(runId);
+    const total = (run?.counts as RunCounts | undefined)?.total;
+    if (!run || run.status !== 'running' || total === undefined) return;
+    if ((await this.repo.countUnfinishedBatches(runId)) > 0) return;
+
+    const staged = await this.repo.stagedCounts(runId);
+    const counts = {
+      total,
+      loaded: staged.loaded,
+      quarantined: staged.quarantined,
+      valid: staged.valid,
+    };
+    await this.repo.transaction(async (tx) => {
+      const completed = await this.repo.transition(tx, runId, ['running'], 'completed', {
+        finishedAt: new Date(),
+        counts,
+      });
+      if (completed) {
+        await this.audit.append(
+          {
+            stream: runStream(runId),
+            action: 'run.completed',
+            entity: 'run',
+            entityId: runId,
+            payload: counts,
+          },
+          tx,
+        );
+      }
+    });
+  }
+
+  /** A job ran out of retries: the batch and its run are failed and the reason kept. */
+  async fail(runId: string, batchId: string | undefined, error: string): Promise<void> {
+    if (batchId) await this.repo.failBatch(batchId, error);
+    await this.repo.transaction(async (tx) => {
+      if (
+        await this.repo.transition(tx, runId, ['queued', 'running'], 'failed', {
+          finishedAt: new Date(),
+        })
+      ) {
+        await this.audit.append(
+          {
+            stream: runStream(runId),
+            action: 'run.failed',
+            entity: 'run',
+            entityId: runId,
+            payload: { batchId, error },
+          },
+          tx,
+        );
+      }
+    });
+  }
+
+  /**
+   * Re-queues work that may have been lost between a commit and the next queue call: extracts
+   * of queued or half-extracted runs, and batches nobody has touched for a while. Job ids
+   * dedupe, so work that is already queued or running is not queued twice.
+   */
+  async sweep(): Promise<number> {
+    const runs = await this.repo.runsAwaitingExtract();
+    for (const runId of runs) await this.queue.extract(runId);
+    const stale = await this.repo.staleBatches(this.env.PIPELINE_STALE_SECONDS);
+    for (const batch of stale) await this.queue.batch(batch);
+    return stale.length;
+  }
+
+  private async runStage(stage: BatchStage, batchId: string, work: StageWork): Promise<void> {
+    await this.repo.heartbeat(batchId);
+    const next = await this.repo.transaction(async (tx) => {
+      const batch = await this.repo.lockBatch(tx, batchId);
+      if (!batch || batch.stage !== stage) return null; // already done by an earlier attempt
+      const run = await this.repo.findRun(batch.runId, tx);
+      if (!run || run.status !== 'running') return null; // paused or cancelled: resume re-queues
+      const nextStage = await work(tx, batch, run);
+      await this.repo.setStage(tx, batch.id, nextStage);
+      return { ...batch, stage: nextStage };
+    });
+    if (!next) return;
+    if (next.stage === 'done') await this.finalizeIfDone(next.runId);
+    else await this.queue.batch(next);
+  }
+
+  private async isRunning(runId: string): Promise<boolean> {
+    return (await this.repo.findRun(runId))?.status === 'running';
+  }
+
+  private async mapping(id: string): Promise<CompiledMapping> {
+    let compiled = this.compiled.get(id);
+    if (!compiled) {
+      // Mapping versions never change, so caching by id is safe.
+      compiled = this.mappings.compile(await this.mappings.get(id));
+      this.compiled.set(id, compiled);
+    }
+    return compiled;
+  }
+}

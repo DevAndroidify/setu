@@ -4,6 +4,9 @@ export { MappingsService } from './mappings.service';
 export {
   compileMapping,
   mapRow,
+  transformRow,
+  validateRow,
+  type TransformedRow,
   type CompiledMapping,
   type FieldIssue,
   type MappedRow,

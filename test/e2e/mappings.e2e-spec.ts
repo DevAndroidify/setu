@@ -60,6 +60,13 @@ describe('mappings and preview', () => {
   it('previews the messy register: normalized values for good rows, every error for bad ones', async () => {
     const { sourceId, fileId } = await api.uploadFile(operator, encodeCp1252(register.csv));
     const mapping = await api.as(operator).post(`/sources/${sourceId}/mappings`, spec).expect(201);
+    const written = () =>
+      pool.query(
+        `SELECT (SELECT count(*) FROM target.persons) persons,
+                (SELECT count(*) FROM staging.raw_rows) raw,
+                (SELECT count(*) FROM control.runs) runs`,
+      );
+    const before = (await written()).rows;
 
     const res = await api
       .as(operator)
@@ -90,11 +97,8 @@ describe('mappings and preview', () => {
       expect(rows[row - 1]!.errors.map((e) => e.field)).toContain(field);
     }
 
-    // Preview writes nothing.
-    const { rows: written } = await pool.query(
-      'SELECT count(*)::int AS n FROM target.persons WHERE created_by_run IS NOT NULL',
-    );
-    expect(written[0].n).toBe(0);
+    // Preview writes nothing (e2e files run one at a time, so nothing else writes meanwhile).
+    expect((await written()).rows).toEqual(before);
   });
 
   it('refuses to preview a file from a different source', async () => {
