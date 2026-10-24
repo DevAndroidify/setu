@@ -31,19 +31,33 @@ export class CsvConnector implements SourceConnector {
 
     const feed = (async () => {
       for await (const chunk of this.bytes) {
+        if (parser.destroyed) return;
         if (!parser.write(decoder.decode(chunk as Buffer, { stream: true }))) {
-          await new Promise((resolve) => parser.once('drain', resolve));
+          await new Promise((resolve) => {
+            parser.once('drain', resolve);
+            parser.once('close', resolve);
+          });
         }
       }
       parser.end(decoder.decode());
     })();
     feed.catch((err: Error) => parser.destroy(err));
 
-    let rowNo = 0;
-    for await (const record of parser) {
-      rowNo += 1;
-      yield { rowNo, values: record as Record<string, string> };
+    let finished = false;
+    try {
+      let rowNo = 0;
+      for await (const record of parser) {
+        rowNo += 1;
+        yield { rowNo, values: record as Record<string, string> };
+      }
+      await feed;
+      finished = true;
+    } finally {
+      // The reader stopped early (e.g. a 50-row preview): close the download too.
+      if (!finished) {
+        parser.destroy();
+        this.bytes.destroy();
+      }
     }
-    await feed;
   }
 }

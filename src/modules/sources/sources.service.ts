@@ -7,12 +7,13 @@ import {
   UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
-import { Prisma, SourceFile } from '@prisma/client';
+import { Prisma, Source, SourceFile } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PROFILE_QUEUE, type ProfileQueue } from '../../shared/queue/queues';
 import { StorageService } from '../../shared/storage/storage.service';
 import { AuditService, GLOBAL_STREAM } from '../audit';
 import type { AuthUser } from '../auth';
+import { CsvConnector, RawRow } from './connectors/csv.connector';
 import { detectEncoding, looksBinary, SNIFF_BYTES, TextEncoding } from './connectors/encoding';
 import { SourcesRepository, Tx } from './sources.repository';
 import {
@@ -130,10 +131,25 @@ export class SourcesService {
     return toView(created);
   }
 
+  async getSource(id: string): Promise<Source> {
+    const source = await this.repo.findSource(id);
+    if (!source) throw new NotFoundException('Source not found');
+    return source;
+  }
+
   async getFile(id: string): Promise<SourceFile> {
     const file = await this.repo.findFile(id);
     if (!file) throw new NotFoundException('File not found');
     return file;
+  }
+
+  /**
+   * Streams a stored file's rows through its connector, decoded with the encoding detected at
+   * upload. Stopping early (e.g. after 50 rows) closes the download.
+   */
+  async readRows(file: SourceFile): Promise<AsyncIterable<RawRow>> {
+    const encoding = (file.encoding ?? 'utf-8') as TextEncoding;
+    return new CsvConnector(await this.storage.stream(file.objectKey), encoding).read();
   }
 
   recordRowCount(tx: Tx, id: string, rowCount: number): Promise<void> {

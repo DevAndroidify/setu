@@ -1,7 +1,8 @@
 // Public API of the transforms module: pure functions, no I/O.
 export * from './transform-result';
 export { devanagariDigits } from './digits';
-export { trim, splitName, type NameParts } from './text';
+export { trim, splitName, titleCase, namePart, type NameParts } from './text';
+export { mapValues } from './values';
 export {
   bsToAd,
   adToBs,
@@ -11,3 +12,11 @@ export {
   BS_MAX_YEAR,
 } from './bs-date';
 export { preetiToUnicode } from './preeti';
+export {
+  TRANSFORMS,
+  compileStep,
+  runChain,
+  type CompiledStep,
+  type TransformName,
+  type TransformStep,
+} from './registry';

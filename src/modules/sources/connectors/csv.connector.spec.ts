@@ -71,4 +71,16 @@ describe('CsvConnector', () => {
     const rows = await readAll(new CsvConnector(Readable.from([bytes]), 'utf-8'));
     expect(rows).toEqual([{ rowNo: 1, values: { NAME: 'Thapa, Ram', NOTE: 'said "hi"' } }]);
   });
+
+  it('closes the byte stream when the reader stops early', async () => {
+    const register = generateRegister({ rows: 2000, seed: 3, encoding: 'utf8' });
+    const bytes = chunked(Buffer.from(register.csv, 'utf8'), 512);
+    const seen: number[] = [];
+    for await (const row of new CsvConnector(bytes, 'utf-8').read()) {
+      seen.push(row.rowNo);
+      if (seen.length === 50) break;
+    }
+    expect(seen).toHaveLength(50);
+    expect(bytes.destroyed).toBe(true);
+  });
 });

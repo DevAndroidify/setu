@@ -1,0 +1,59 @@
+{
+  "fields": [
+    {
+      "target": "person.name_ne",
+      "from": ["NAAM"],
+      "transforms": [{ "name": "preetiToUnicode" }, { "name": "trim" }],
+      "rules": ["required", "maxLength:100"]
+    },
+    {
+      "target": "person.name_en",
+      "from": ["NAAM_EN"],
+      "transforms": [{ "name": "titleCase" }],
+      "rules": ["required", "maxLength:100"]
+    },
+    {
+      "target": "person.gender",
+      "from": ["LINGA"],
+      "transforms": [
+        {
+          "name": "mapValues",
+          "args": {
+            "values": {
+              "M": "male",
+              "Male": "male",
+              "Purush": "male",
+              "F": "female",
+              "Female": "female",
+              "Mahila": "female"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "target": "person.dob_ad",
+      "from": ["JANMA_MITI"],
+      "transforms": [
+        { "name": "devanagariDigits" },
+        {
+          "name": "bsToAd",
+          "args": { "formats": ["YYYY/M/D", "YYYY-MM-DD", "D/M/YYYY", "YYYY.MM.DD"] }
+        }
+      ],
+      "rules": ["notFuture", "after:1940-01-01"]
+    },
+    {
+      "target": "person.citizenship_no",
+      "from": ["NAGARIKTA_NO"],
+      "transforms": [{ "name": "trim" }],
+      "rules": ["citizenshipFormat"]
+    },
+    {
+      "target": "person.father_name_ne",
+      "from": ["BABU_NAAM"],
+      "transforms": [{ "name": "preetiToUnicode" }, { "name": "trim" }],
+      "onError": "null"
+    }
+  ]
+}

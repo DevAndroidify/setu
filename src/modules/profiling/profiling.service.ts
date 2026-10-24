@@ -1,8 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CsvError } from 'csv-parse';
-import { StorageService } from '../../shared/storage/storage.service';
 import { AuditService, GLOBAL_STREAM } from '../audit';
-import { CsvConnector, SourcesService, TextEncoding } from '../sources';
+import { SourcesService } from '../sources';
 import { FileProfiler, ProfileReport } from './column-profiler';
 import { ProfilingRepository } from './profiling.repository';
 
@@ -15,7 +14,6 @@ export class ProfilingService {
   constructor(
     private readonly repo: ProfilingRepository,
     private readonly sources: SourcesService,
-    private readonly storage: StorageService,
     private readonly audit: AuditService,
   ) {}
 
@@ -27,13 +25,12 @@ export class ProfilingService {
   async profileFile(sourceFileId: string): Promise<void> {
     if (await this.repo.findByFile(sourceFileId)) return;
     const file = await this.sources.getFile(sourceFileId);
-    const encoding = (file.encoding ?? 'utf-8') as TextEncoding;
+    const encoding = file.encoding ?? 'utf-8';
 
     let report: ProfileReport | FailedProfile;
     try {
       const profiler = new FileProfiler();
-      const connector = new CsvConnector(await this.storage.stream(file.objectKey), encoding);
-      for await (const row of connector.read()) profiler.add(row.values);
+      for await (const row of await this.sources.readRows(file)) profiler.add(row.values);
       report = profiler.report(encoding);
     } catch (err) {
       if (!(err instanceof CsvError)) throw err; // infrastructure: let the queue retry

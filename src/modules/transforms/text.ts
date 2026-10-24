@@ -23,3 +23,18 @@ export function splitName(input: string): TransformResult<NameParts> {
     last: words[words.length - 1] ?? '',
   });
 }
+
+/** "RAM  bahadur THAPA" -> "Ram Bahadur Thapa". Leaves non-Latin scripts as they are. */
+export function titleCase(input: string): TransformResult<string> {
+  const text = input.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+  return ok(
+    text.replace(/(^|[\s'-])([a-z])/g, (_, sep: string, ch: string) => sep + ch.toUpperCase()),
+  );
+}
+
+/** Picks one part of a full name (see splitName). */
+export function namePart(input: string, args: { part: keyof NameParts }): TransformResult<string> {
+  const result = splitName(input);
+  if (!result.ok) return result;
+  return ok(result.value[args.part], result.warnings);
+}
