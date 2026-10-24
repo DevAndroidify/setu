@@ -29,6 +29,28 @@ export class TargetService {
     return this.repo.existingCitizenshipNos(tx, numbers);
   }
 
+  /** person id -> stored values, read back from target for reconciliation. */
+  async valuesForRun(runId: string): Promise<Map<string, PersonValues>> {
+    const persons = await this.repo.personsCreatedByRun(runId);
+    return new Map(
+      persons.map((p) => [
+        p.id,
+        {
+          name_ne: p.nameNe,
+          name_en: p.nameEn,
+          gender: p.gender,
+          dob_ad: p.dobAd ? p.dobAd.toISOString().slice(0, 10) : null,
+          citizenship_no: p.citizenshipNo,
+          father_name_ne: p.fatherNameNe,
+        },
+      ]),
+    );
+  }
+
+  deletePersons(tx: Tx, ids: string[]): Promise<number> {
+    return this.repo.deletePersons(tx, ids);
+  }
+
   /**
    * Loads validated persons in the caller's transaction. Fails (so the batch retries) if any
    * row was not inserted, e.g. another batch took the same citizenship number at the same time.

@@ -5,6 +5,7 @@ import { HealthModule } from '../../src/modules/health/health.module';
 import { MappingsModule } from '../../src/modules/mappings/mappings.module';
 import { PipelineModule } from '../../src/modules/pipeline/pipeline.module';
 import { QuarantineModule } from '../../src/modules/quarantine/quarantine.module';
+import { ReconciliationModule } from '../../src/modules/reconciliation/reconciliation.module';
 import { ProfilingModule } from '../../src/modules/profiling/profiling.module';
 import { SourcesModule } from '../../src/modules/sources/sources.module';
 import { ConfigModule } from '../../src/shared/config/config.module';
@@ -28,6 +29,7 @@ import { StorageModule } from '../../src/shared/storage/storage.module';
     MappingsModule,
     PipelineModule,
     QuarantineModule,
+    ReconciliationModule,
   ],
 })
 export class ApiModule {}

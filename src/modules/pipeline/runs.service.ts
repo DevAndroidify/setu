@@ -7,8 +7,10 @@ import {
 import type { Run, RunMode, RunStatus } from '@prisma/client';
 import { AuditService } from '../audit';
 import type { AuthUser } from '../auth';
+import { LineageService } from '../lineage/lineage.service';
 import { MappingsService } from '../mappings';
 import { SourcesService } from '../sources';
+import { TargetService } from '../target/target.service';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineRepository, RunCounts } from './pipeline.repository';
 import { runStream } from './stages.service';
@@ -23,6 +25,8 @@ export class RunsService {
     private readonly queue: PipelineQueueService,
     private readonly sources: SourcesService,
     private readonly mappings: MappingsService,
+    private readonly target: TargetService,
+    private readonly lineage: LineageService,
     private readonly audit: AuditService,
   ) {}
 
@@ -91,6 +95,62 @@ export class RunsService {
       user,
       'run.cancelled',
     );
+    return this.get(id);
+  }
+
+  /**
+   * Undoes a production run's loads, newest batch first, one transaction per batch: deletes the
+   * persons and their lineage and marks the staged rows valid again. Refused when a later run
+   * has linked to those persons. Safe to repeat after a crash: emptied batches are skipped.
+   */
+  async rollback(id: string, user: AuthUser): Promise<Run> {
+    const run = await this.get(id);
+    if (run.mode !== 'production') throw new ConflictException('Only production runs load data');
+    if (!['completed', 'cancelled', 'failed'].includes(run.status)) {
+      throw new ConflictException(`A ${run.status} run cannot be rolled back`);
+    }
+    if (await this.lineage.linkedFromOtherRuns(id)) {
+      throw new ConflictException(
+        'Later runs have linked to records from this run; roll those back first',
+      );
+    }
+
+    let removed = 0;
+    for (const batch of await this.repo.batchesNewestFirst(id)) {
+      await this.repo.transaction(async (tx) => {
+        const personIds = await this.lineage.deleteForBatch(tx, batch.id);
+        if (personIds.length === 0) return;
+        const deleted = await this.target.deletePersons(tx, personIds);
+        await this.repo.unloadBatch(tx, batch.id);
+        await this.audit.append(
+          {
+            stream: runStream(id),
+            actorId: user.id,
+            action: 'batch.rolled_back',
+            entity: 'batch',
+            entityId: batch.id,
+            payload: { seq: batch.seq, removed: deleted },
+          },
+          tx,
+        );
+        removed += deleted;
+      });
+    }
+
+    await this.repo.transaction(async (tx) => {
+      await this.repo.transition(tx, id, ['completed', 'cancelled', 'failed'], 'rolled_back');
+      await this.audit.append(
+        {
+          stream: runStream(id),
+          actorId: user.id,
+          action: 'run.rolled_back',
+          entity: 'run',
+          entityId: id,
+          payload: { removed },
+        },
+        tx,
+      );
+    });
     return this.get(id);
   }
 

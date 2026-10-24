@@ -17,4 +17,18 @@ export class LineageService {
   countForRun(runId: string): Promise<number> {
     return this.repo.countForRun(runId);
   }
+
+  /** raw row id -> person id, for every person the run loaded. */
+  async personsForRun(runId: string): Promise<Map<bigint, string>> {
+    const links = await this.repo.forRun(runId);
+    return new Map(links.map((l) => [l.rawRowId, l.targetId]));
+  }
+
+  deleteForBatch(tx: Prisma.TransactionClient, batchId: string): Promise<string[]> {
+    return this.repo.deleteForBatch(tx, batchId);
+  }
+
+  linkedFromOtherRuns(runId: string): Promise<boolean> {
+    return this.repo.linkedFromOtherRuns(runId);
+  }
 }

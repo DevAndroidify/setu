@@ -3,6 +3,7 @@ import { AuditModule } from '../audit/audit.module';
 import { LineageModule } from '../lineage/lineage.module';
 import { MappingsModule } from '../mappings/mappings.module';
 import { QuarantineModule } from '../quarantine/quarantine.module';
+import { ReconciliationModule } from '../reconciliation/reconciliation.module';
 import { SourcesModule } from '../sources/sources.module';
 import { TargetModule } from '../target/target.module';
 import { PipelineQueueService } from './pipeline-queue.service';
@@ -19,6 +20,7 @@ import { StagesService } from './stages.service';
     QuarantineModule,
     TargetModule,
     LineageModule,
+    ReconciliationModule,
   ],
   controllers: [PipelineController],
   providers: [RunsService, StagesService, PipelineQueueService, PipelineRepository],

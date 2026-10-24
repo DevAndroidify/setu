@@ -199,14 +199,15 @@ model Run {
   startedAt    DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt   DateTime? @map("finished_at") @db.Timestamptz(3)
 
-  sourceFile SourceFile @relation(fields: [sourceFileId], references: [id])
-  mapping    Mapping    @relation(fields: [mappingId], references: [id])
-  creator    User       @relation("RunCreatedBy", fields: [createdBy], references: [id])
-  approver   User?      @relation("RunApprovedBy", fields: [approvedBy], references: [id])
+  sourceFile SourceFile            @relation(fields: [sourceFileId], references: [id])
+  mapping    Mapping               @relation(fields: [mappingId], references: [id])
+  creator    User                  @relation("RunCreatedBy", fields: [createdBy], references: [id])
+  approver   User?                 @relation("RunApprovedBy", fields: [approvedBy], references: [id])
   batches    Batch[]
   approvals  Approval[]
   rawRows    RawRow[]
   lineage    Lineage[]
+  report     ReconciliationReport?
 
   @@index([status])
   @@map("runs")
@@ -251,6 +252,18 @@ model Approval {
 
   @@index([runId])
   @@map("approvals")
+  @@schema("control")
+}
+
+/// Written when a run finishes: counts, per-column checksums and a sample diff.
+model ReconciliationReport {
+  runId     String   @id @map("run_id") @db.Uuid
+  report    Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  run Run @relation(fields: [runId], references: [id])
+
+  @@map("reconciliation_reports")
   @@schema("control")
 }
 

@@ -7,6 +7,8 @@ import { AuditService } from '../audit';
 import { LineageService } from '../lineage/lineage.service';
 import { CompiledMapping, MappingsService, transformRow, validateRow } from '../mappings';
 import { QuarantineService } from '../quarantine/quarantine.service';
+import type { FieldValues, LoadedPair } from '../reconciliation/reconcile';
+import { ReconciliationService } from '../reconciliation/reconciliation.service';
 import { RawRow, SourcesService } from '../sources';
 import { PersonValues, TargetService } from '../target/target.service';
 import { PersonField, todayInNepal } from '../validation';
@@ -35,6 +37,7 @@ export class StagesService {
     private readonly quarantine: QuarantineService,
     private readonly target: TargetService,
     private readonly lineage: LineageService,
+    private readonly reconciliation: ReconciliationService,
     private readonly audit: AuditService,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -239,23 +242,58 @@ export class StagesService {
       quarantined: staged.quarantined,
       valid: staged.valid,
     };
+    const report = await this.reconcile(run, total, staged);
     await this.repo.transaction(async (tx) => {
       const completed = await this.repo.transition(tx, runId, ['running'], 'completed', {
         finishedAt: new Date(),
         counts,
       });
       if (completed) {
+        await this.reconciliation.save(tx, runId, report);
         await this.audit.append(
           {
             stream: runStream(runId),
             action: 'run.completed',
             entity: 'run',
             entityId: runId,
-            payload: counts,
+            payload: { ...counts, reconciled: report.ok, problems: report.counts.problems },
           },
           tx,
         );
       }
+    });
+  }
+
+  /** Reconcile stage: staging against target, read back independently. */
+  private async reconcile(
+    run: Run,
+    extractedRows: number,
+    statusCounts: Awaited<ReturnType<PipelineRepository['stagedCounts']>>,
+  ) {
+    const file = await this.sources.getFile(run.sourceFileId);
+    const pairs: LoadedPair[] = [];
+    if (run.mode === 'production') {
+      const [loaded, personOf, stored] = await Promise.all([
+        this.repo.loadedRows(run.id),
+        this.lineage.personsForRun(run.id),
+        this.target.valuesForRun(run.id),
+      ]);
+      for (const row of loaded) {
+        const personId = personOf.get(row.rawRowId);
+        pairs.push({
+          rowNo: row.rowNo,
+          staged: row.normalized as FieldValues,
+          target: (personId && stored.get(personId)) || null,
+        });
+      }
+    }
+    return this.reconciliation.build({
+      runId: run.id,
+      mode: run.mode,
+      profiledRows: file.rowCount,
+      extractedRows,
+      statusCounts,
+      pairs,
     });
   }
 

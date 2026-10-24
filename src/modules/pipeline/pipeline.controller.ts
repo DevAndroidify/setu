@@ -52,6 +52,14 @@ export class PipelineController {
     return this.runs.cancel(id, user);
   }
 
+  /** Undo a run's loads. Approvers only: rolling back changes production data. */
+  @Roles('approver')
+  @Post(':id/rollback')
+  @HttpCode(200)
+  rollback(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
+    return this.runs.rollback(id, user);
+  }
+
   /** Any signed-in role may follow a run's status and counts. */
   @Get(':id')
   status(@Param('id', ParseUUIDPipe) id: string) {

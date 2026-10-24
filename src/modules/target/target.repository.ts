@@ -28,6 +28,16 @@ export class TargetRepository {
     return new Set(rows.map((r) => r.citizenshipNo!));
   }
 
+  personsCreatedByRun(runId: string) {
+    return this.prisma.person.findMany({ where: { createdByRun: runId } });
+  }
+
+  async deletePersons(tx: Tx, ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const { count } = await tx.person.deleteMany({ where: { id: { in: ids } } });
+    return count;
+  }
+
   /** Inserts persons; returns how many were new. Existing ids (a retried load) are skipped. */
   async insertPersons(tx: Tx, persons: NewPerson[]): Promise<number> {
     if (persons.length === 0) return 0;

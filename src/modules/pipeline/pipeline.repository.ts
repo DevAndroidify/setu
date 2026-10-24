@@ -186,6 +186,26 @@ export class PipelineRepository {
     });
   }
 
+  /** Every loaded row of a run with what staging said to load. */
+  loadedRows(runId: string): Promise<{ rawRowId: bigint; rowNo: number; normalized: unknown }[]> {
+    return this.prisma.$queryRaw`
+      SELECT r.id AS "rawRowId", r.row_no AS "rowNo", s.normalized
+      FROM staging.staged_rows s JOIN staging.raw_rows r ON r.id = s.raw_row_id
+      WHERE r.run_id = ${runId}::uuid AND s.status = 'loaded'`;
+  }
+
+  batchesNewestFirst(runId: string): Promise<Batch[]> {
+    return this.prisma.batch.findMany({ where: { runId }, orderBy: { seq: 'desc' } });
+  }
+
+  /** After a rollback, the batch's loaded rows are valid again (and could be reloaded). */
+  async unloadBatch(tx: Tx, batchId: string): Promise<void> {
+    await tx.stagedRow.updateMany({
+      where: { rawRow: { batchId }, status: 'loaded' },
+      data: { status: 'valid' },
+    });
+  }
+
   async setStagedStatus(tx: Tx, ids: bigint[], status: StagedStatus): Promise<void> {
     if (ids.length === 0) return;
     await tx.stagedRow.updateMany({ where: { id: { in: ids } }, data: { status } });
