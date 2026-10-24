@@ -1,0 +1,6 @@
+{
+  "label": "tuned-blocking",
+  "file": "load/data/register-100k.cp1252.csv",
+  "importSeconds": 102.062,
+  "rowsPerSecond": 979.7965942270384
+}

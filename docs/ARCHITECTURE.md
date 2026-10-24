@@ -459,25 +459,25 @@ Sixteen small phases. Each ends with something you can run and a test that passe
 
 **Core slice**
 
-- [ ] **1. Skeleton**: NestJS app, `api` and `worker` entry points, Docker Compose (Postgres, Redis, MinIO), env validation with zod, `/health`. Check: `docker compose up` then `curl /health/ready` returns 200.
-- [ ] **2. Tooling and CI**: ESLint, Prettier, Husky, commitlint, Jest, GitHub Actions running lint + tests. Check: a PR shows a green CI run.
-- [ ] **3. Synthetic legacy data**: `tools/generate-legacy-data.ts` makes a CSV in Windows-1252 with Preeti names, mixed BS date formats, Devanagari digits, old VDC names, invalid wards and deliberate duplicates. Check: a snapshot test on a fixed random seed.
-- [ ] **4. Transform library**: `devanagariDigits`, `bsToAd`, `fiscalYear`, `preetiToUnicode`, `trim`, `splitName`. Check: golden + property tests pass.
-- [ ] **5. Database schemas**: Prisma models for all four schemas, raw-SQL migration for audit triggers. Check: integration test proves UPDATE on `audit.events` fails.
-- [ ] **6. Auth and roles**: login, refresh, `@Roles()` guard, seed users per role. Check: API tests for 401 and 403 cases.
-- [ ] **7. Audit module**: hash-chained append, per-stream lock, `/audit/verify`, tamper demo script. Check: tamper test reports the exact broken `seq`.
-- [ ] **8. Sources and profiling**: upload to MinIO, sha256 dedupe, streaming CSV connector, profile report. Check: profiling the generated file flags the Preeti column and the date formats.
-- [ ] **9. Mappings and preview**: versioned specs, transform registry, validation rules, `/preview` on 50 rows. Check: preview of the messy file shows expected normalized values and errors.
-- [ ] **10. Pipeline**: runs, batches, BullMQ stages Extract → Transform → Validate → Load, quarantine, lineage, dry run. Check: e2e test asserts loaded + quarantined = total; crash test shows no duplicates after resume.
+- [x] **1. Skeleton**: NestJS app, `api` and `worker` entry points, Docker Compose (Postgres, Redis, MinIO), env validation with zod, `/health`. Check: `docker compose up` then `curl /health/ready` returns 200.
+- [x] **2. Tooling and CI**: ESLint, Prettier, Husky, commitlint, Jest, GitHub Actions running lint + tests. Check: a PR shows a green CI run.
+- [x] **3. Synthetic legacy data**: `tools/generate-legacy-data.ts` makes a CSV in Windows-1252 with Preeti names, mixed BS date formats, Devanagari digits, old VDC names, invalid wards and deliberate duplicates. Check: a snapshot test on a fixed random seed.
+- [x] **4. Transform library**: `devanagariDigits`, `bsToAd`, `fiscalYear`, `preetiToUnicode`, `trim`, `splitName`. Check: golden + property tests pass.
+- [x] **5. Database schemas**: Prisma models for all four schemas, raw-SQL migration for audit triggers. Check: integration test proves UPDATE on `audit.events` fails.
+- [x] **6. Auth and roles**: login, refresh, `@Roles()` guard, seed users per role. Check: API tests for 401 and 403 cases.
+- [x] **7. Audit module**: hash-chained append, per-stream lock, `/audit/verify`, tamper demo script. Check: tamper test reports the exact broken `seq`.
+- [x] **8. Sources and profiling**: upload to MinIO, sha256 dedupe, streaming CSV connector, profile report. Check: profiling the generated file flags the Preeti column and the date formats.
+- [x] **9. Mappings and preview**: versioned specs, transform registry, validation rules, `/preview` on 50 rows. Check: preview of the messy file shows expected normalized values and errors.
+- [x] **10. Pipeline**: runs, batches, BullMQ stages Extract → Transform → Validate → Load, quarantine, lineage, dry run. Check: e2e test asserts loaded + quarantined = total; crash test shows no duplicates after resume.
 
 **Second slice**
 
-- [ ] **11. Reconciliation and rollback**: counts, checksums, sample diff, CSV export, batch rollback. Check: rollback leaves target identical to before the run.
-- [ ] **12. Maker-checker approvals**: submit, approve or reject, expiry. Check: same-user approval returns 403.
-- [ ] **13. Address crosswalk**: local units reference data, legacy VDC table, `vdcToLocalUnit` with an ambiguous-case flag, ward validation. Check: known VDCs map correctly; split ones go to review.
-- [ ] **14. Duplicate matching**: blocking, Jaro-Winkler on transliterated names, review queue, link decisions. Check: the generator's planted duplicates are found.
-- [ ] **15. Masking, rate limits, observability**: unmask with reason, pino redaction, Prometheus metrics, SSE progress. Check: logs contain no citizenship numbers.
-- [ ] **16. Performance and docs**: k6 load test, tuning with before/after numbers, README with diagram and ADRs. Check: 100,000-row run completes and numbers are recorded.
+- [x] **11. Reconciliation and rollback**: counts, checksums, sample diff, CSV export, batch rollback. Check: rollback leaves target identical to before the run.
+- [x] **12. Maker-checker approvals**: submit, approve or reject, expiry. Check: same-user approval returns 403.
+- [x] **13. Address crosswalk**: local units reference data, legacy VDC table, `vdcToLocalUnit` with an ambiguous-case flag, ward validation. Check: known VDCs map correctly; split ones go to review.
+- [x] **14. Duplicate matching**: blocking, Jaro-Winkler on transliterated names, review queue, link decisions. Check: the generator's planted duplicates are found.
+- [x] **15. Masking, rate limits, observability**: unmask with reason, pino redaction, Prometheus metrics, SSE progress. Check: logs contain no citizenship numbers.
+- [x] **16. Performance and docs**: k6 load test, tuning with before/after numbers, README with diagram and ADRs. Check: 100,000-row run completes and numbers are recorded.
 
 After phase 16: the compatibility API (optional), then the frontend.
 

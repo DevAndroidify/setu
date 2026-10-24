@@ -1,0 +1,8 @@
+{
+  "label": "baseline",
+  "requests": 30512,
+  "requestsPerSecond": 506.6115832067519,
+  "searchP95ms": 52.9464097,
+  "personP95ms": 51.343396,
+  "failed": 0
+}

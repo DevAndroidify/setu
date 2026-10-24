@@ -1,0 +1,6 @@
+{
+  "label": "tuned-prepared",
+  "file": "load/data/register-100k.cp1252.csv",
+  "importSeconds": 93.678,
+  "rowsPerSecond": 1067.4864962958218
+}

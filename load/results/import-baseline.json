@@ -1,0 +1,6 @@
+{
+  "label": "baseline",
+  "file": "load/data/register-100k.cp1252.csv",
+  "importSeconds": 325.036,
+  "rowsPerSecond": 307.65822862698286
+}

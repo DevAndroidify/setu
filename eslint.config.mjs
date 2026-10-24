@@ -15,5 +15,10 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // k6 scripts run in k6's JavaScript runtime, which provides these globals.
+    files: ['load/**/*.js'],
+    languageOptions: { globals: { __ENV: 'readonly', open: 'readonly', console: 'readonly' } },
+  },
   prettier,
 );

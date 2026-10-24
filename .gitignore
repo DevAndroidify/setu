@@ -4,3 +4,4 @@ coverage/
 .env
 *.tsbuildinfo
 test/fixtures/generated/
+load/data/

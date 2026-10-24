@@ -1,0 +1,8 @@
+{
+  "label": "tuned",
+  "requests": 28924,
+  "requestsPerSecond": 480.91497260439337,
+  "searchP95ms": 55.19368,
+  "personP95ms": 53.916384,
+  "failed": 0
+}
