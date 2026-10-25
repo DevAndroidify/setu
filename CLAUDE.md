@@ -44,7 +44,8 @@ ask before changing the design.
 
 ## Git
 
-- Conventional Commits: `feat(transforms): add Preeti to Unicode converter`.
+- Plain commit messages: a short capitalized sentence, e.g. `Add Preeti to Unicode converter`,
+  with no `feat:`/`docs:` prefix and no co-author trailer.
 - One phase = one or a few small commits with clear messages.
 - Do not push, open pull requests or rewrite history unless I ask.
 

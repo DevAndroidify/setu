@@ -24,7 +24,7 @@ Setu is a web platform that moves government records from legacy systems to a mo
 | Programming | TypeScript modules for transforms, matching, pipeline |
 | Unit testing | Known-answer tests for every transform, 85%+ coverage on core |
 | Debugging | Correlation IDs, structured logs, quarantine reasons |
-| Git | Trunk-based flow, conventional commits, PR template |
+| Git | Trunk-based flow, clear commit messages, PR template |
 | System design (Senior) | Modular monolith, API + worker split, staging layers |
 | Database design (Senior) | Separate schemas, constraints, indexes, audit triggers |
 | Performance tuning (Senior) | Chunked loads, COPY, indexes, load test |
@@ -94,7 +94,7 @@ Node.js 22 + TypeScript on NestJS, PostgreSQL 16, Redis + BullMQ, MinIO, all run
 | Tests | Jest, supertest, Testcontainers (real Postgres + Redis in tests), fast-check (property tests) | Tests run against the real database, not mocks |
 | Load test | k6 | Measure import throughput and API latency |
 | Nepali data | @remotemerge/nepali-date-converter, preeti converter (own port with tests), nepali-geo data | BS dates, legacy fonts, admin units |
-| Quality | ESLint, Prettier, Husky + lint-staged, commitlint | Consistent code and commit history |
+| Quality | ESLint, Prettier, Husky + lint-staged | Consistent code |
 | CI | GitHub Actions | Lint, type-check, test, build, Docker image on every PR |
 
 If NestJS feels too heavy in the time available, the same module boundaries work in Express + TypeScript; only the wiring changes.
@@ -398,7 +398,7 @@ The repository itself is part of the portfolio: an interviewer will open the com
 **Git workflow**
 
 - Trunk-based: `main` is always green; short-lived branches `feat/…`, `fix/…`, `test/…`, merged by pull request.
-- Conventional Commits enforced by commitlint: `feat(transforms): add Preeti to Unicode converter`.
+- Plain, descriptive commit messages: `Add Preeti to Unicode converter`.
 - One phase = one or a few small PRs, each with a description: what, why, how tested.
 - PR template with a checklist: tests added, docs updated, migration included, no secrets.
 - Tags per milestone (`v0.1.0` core slice) with a CHANGELOG.
