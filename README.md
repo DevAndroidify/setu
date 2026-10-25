@@ -31,14 +31,14 @@ Each stage handles batches of 1,000 rows in one transaction. Every row ends in e
 place: loaded, linked to a person already in target, quarantined with all its reasons, or held
 for duplicate review. Rows are never dropped.
 
-| Stage     | What it does                                                                                   |
-| --------- | ---------------------------------------------------------------------------------------------- |
-| Extract   | Streams the file from MinIO (Windows-1252 or UTF-8) into `staging.raw_rows`                    |
-| Transform | Runs the pinned mapping: Preeti to Unicode, Devanagari digits, BS to AD, old VDC to local unit |
-| Validate  | Field rules and the row schema (dates, citizenship number format, ward within the unit)        |
-| Match     | Compares with earlier rows and existing persons (district + birth year blocks, Jaro-Winkler)   |
-| Load      | Inserts persons, households and lineage; dry runs stop before Match                            |
-| Reconcile | Counts, per-column checksums and a 1% field-by-field sample, saved as a report                 |
+| Stage     | What it does                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------ |
+| Extract   | Streams the file from MinIO into `staging.raw_rows`: CSV, Excel (.xlsx), XML or a SQL dump (see below) |
+| Transform | Runs the pinned mapping: Preeti to Unicode, Devanagari digits, BS to AD, old VDC to local unit         |
+| Validate  | Field rules and the row schema (dates, citizenship number format, ward within the unit)                |
+| Match     | Compares with earlier rows and existing persons (district + birth year blocks, Jaro-Winkler)           |
+| Load      | Inserts persons, households and lineage; dry runs stop before Match                                    |
+| Reconcile | Counts, per-column checksums and a 1% field-by-field sample, saved as a report                         |
 
 ## Run it
 
@@ -57,7 +57,19 @@ curl localhost:3000/health/ready
 
 Demo users are `operator@setu.local`, `reviewer@`, `approver@`, `auditor@` and `admin@`, all with
 the password in `SEED_PASSWORD`. Generate a messy register with
-`npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252`.
+`npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252` (add `--format xlsx|xml|sql`
+for the other formats).
+
+### Source formats
+
+| Kind    | Reads                                                                       | Notes                                                           |
+| ------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `csv`   | First row is the header                                                     | Encoding detected from the bytes                                |
+| `excel` | First worksheet of an .xlsx; first non-empty row is the header              | Old .xls is refused: save as .xlsx or CSV                       |
+| `xml`   | One record per child of the root; attributes and child elements are columns | Declared encoding honored; external entities never loaded       |
+| `sql`   | `INSERT` rows of one table; columns from the INSERT or its `CREATE TABLE`   | Parsed, never executed; literal values only; one table per file |
+
+A file that cannot be read as its format gets a failed profile with the reason.
 
 ## Tests
 

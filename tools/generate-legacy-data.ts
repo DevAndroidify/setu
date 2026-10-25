@@ -3,13 +3,15 @@
  * Preeti-encoded names, mixed BS date formats, Devanagari digits (UTF-8 output only), old VDC
  * names, invalid wards and planted duplicates. Every value is synthetic.
  *
- * Usage: npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252
- * Writes <out>.<encoding>.csv and <out>.<encoding>.truth.json (which rows carry which problem).
+ * Usage: npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252 [--format xlsx|xml|sql]
+ * Writes <out>.<encoding>.<format> (csv by default) and <out>.<encoding>.truth.json (which rows
+ * carry which problem).
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
+import { toSqlDump, toXlsx, toXml } from './legacy-formats';
 
 export type Encoding = 'cp1252' | 'utf8';
 export type AnomalyKind =
@@ -338,15 +340,17 @@ const cliSchema = z.object({
   rows: z.coerce.number().int().min(1).max(1_000_000),
   seed: z.coerce.number().int().min(0),
   encoding: z.enum(['cp1252', 'utf8']),
+  format: z.enum(['csv', 'xlsx', 'xml', 'sql']),
   out: z.string().min(1),
 });
 
-function main(): void {
+async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       rows: { type: 'string', default: '1000' },
       seed: { type: 'string', default: '42' },
       encoding: { type: 'string', default: 'cp1252' },
+      format: { type: 'string', default: 'csv' },
       out: { type: 'string', default: 'test/fixtures/generated/register' },
     },
   });
@@ -355,14 +359,20 @@ function main(): void {
   const base = `${args.out}.${args.encoding}`;
 
   mkdirSync(dirname(base), { recursive: true });
-  const bytes =
-    args.encoding === 'cp1252' ? encodeCp1252(register.csv) : Buffer.from(register.csv, 'utf8');
-  writeFileSync(`${base}.csv`, bytes);
+  const text = (s: string) =>
+    args.encoding === 'cp1252' ? encodeCp1252(s) : Buffer.from(s, 'utf8');
+  const bytes = {
+    csv: async () => text(register.csv),
+    xlsx: () => toXlsx(register), // a workbook holds Unicode text whatever the encoding
+    xml: async () => text(toXml(register, args.encoding === 'cp1252' ? 'windows-1252' : 'utf-8')),
+    sql: async () => text(toSqlDump(register)),
+  }[args.format];
+  writeFileSync(`${base}.${args.format}`, await bytes());
   writeFileSync(`${base}.truth.json`, JSON.stringify(register.truth, null, 2) + '\n');
   console.log(
-    `wrote ${base}.csv: ${args.rows} rows, ${register.truth.anomalies.length} anomalies, ` +
+    `wrote ${base}.${args.format}: ${args.rows} rows, ${register.truth.anomalies.length} anomalies, ` +
       `${register.truth.duplicates.length} duplicates`,
   );
 }
 
-if (require.main === module) main();
+if (require.main === module) void main();

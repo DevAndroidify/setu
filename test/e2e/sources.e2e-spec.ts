@@ -133,11 +133,6 @@ describe('sources and profiling', () => {
     expect(res.headers['content-type']).toMatch(/problem\+json/);
   });
 
-  it('rejects uploads for source kinds without a connector yet', async () => {
-    const sourceId = await createSource(operator, 'sql');
-    await upload(sourceId, Buffer.from('INSERT INTO t VALUES (1);')).expect(422);
-  });
-
   it('forbids a reviewer from registering sources', async () => {
     const reviewer = await tokenFor('reviewer');
     await http()

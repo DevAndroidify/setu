@@ -1,7 +1,7 @@
 import { INestApplication, INestApplicationContext } from '@nestjs/common';
 import { Pool } from 'pg';
 import { encodeCp1252, generateRegister } from '../../tools/generate-legacy-data';
-import { toXlsx, toXml } from '../../tools/legacy-formats';
+import { toSqlDump, toXlsx, toXml } from '../../tools/legacy-formats';
 import { apiClient } from '../support/api-client';
 import { startApi } from '../support/app';
 import { createTestPool } from '../support/db';
@@ -13,6 +13,7 @@ const register = generateRegister({ rows: 500, seed: 2525, encoding: 'cp1252' })
 const FORMATS: { kind: string; bytes: () => Promise<Buffer> }[] = [
   { kind: 'excel', bytes: () => toXlsx(register) },
   { kind: 'xml', bytes: async () => encodeCp1252(toXml(register, 'windows-1252')) },
+  { kind: 'sql', bytes: async () => encodeCp1252(toSqlDump(register)) },
 ];
 
 describe('legacy file formats', () => {
@@ -85,6 +86,25 @@ describe('legacy file formats', () => {
     const bytes = Buffer.from('<?xml version="1.0" encoding="Shift_JIS"?><rows/>');
     const res = await api.as(operator).upload(`/sources/${sourceId}/files`, bytes).expect(415);
     expect(res.body.detail).toMatch(/UTF-8 or Windows-1252/);
+  });
+
+  it('saves a failed profile for a SQL dump with rows of two tables', async () => {
+    const { fileId } = await api.uploadFile(
+      operator,
+      Buffer.from('INSERT INTO a (x) VALUES (1);\nINSERT INTO b (x) VALUES (2);\n'),
+      'sql',
+      'two-tables.sql',
+    );
+    let profile = null;
+    for (let i = 0; i < 100 && !profile; i++) {
+      const res = await api.as(operator).get(`/files/${fileId}/profile`);
+      if (res.status === 200) profile = res.body;
+      else await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(profile).toMatchObject({
+      status: 'failed',
+      error: expect.stringMatching(/one table per file/),
+    });
   });
 
   it('rejects a text file uploaded to an Excel source', async () => {

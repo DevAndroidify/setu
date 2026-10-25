@@ -4,7 +4,6 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { Prisma, Source, SourceFile } from '@prisma/client';
@@ -22,12 +21,7 @@ import {
 } from './connectors';
 import { detectEncoding, looksBinary, SNIFF_BYTES, TextEncoding } from './connectors/encoding';
 import { SourcesRepository, Tx } from './sources.repository';
-import {
-  CreateSourceRequest,
-  SourceFileView,
-  UPLOADABLE_KINDS,
-  UploadedFile,
-} from './sources.types';
+import { CreateSourceRequest, SourceFileView, UploadedFile } from './sources.types';
 
 const toView = (file: SourceFile): SourceFileView => ({
   id: file.id,
@@ -74,9 +68,6 @@ export class SourcesService {
   async upload(sourceId: string, file: UploadedFile, user: AuthUser): Promise<SourceFileView> {
     const source = await this.repo.findSource(sourceId);
     if (!source) throw new NotFoundException('Source not found');
-    if (!UPLOADABLE_KINDS.has(source.kind)) {
-      throw new UnprocessableEntityException(`Uploading ${source.kind} files is not supported yet`);
-    }
     if (file.size === 0) throw new BadRequestException('The file is empty');
 
     // Judge the content, not the file name.

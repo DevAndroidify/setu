@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import { encodeCp1252, generateRegister } from '../../../../tools/generate-legacy-data';
 import { toXml } from '../../../../tools/legacy-formats';
 import { CsvConnector, RawRow, SourceConnector } from './csv.connector';
+import { SourceFormatError } from './format-error';
 import { declaredXmlEncoding, XmlConnector } from './xml.connector';
 
 async function readAll(connector: SourceConnector): Promise<RawRow[]> {
@@ -49,14 +50,16 @@ describe('XmlConnector', () => {
 
   it('fails on malformed XML instead of guessing', async () => {
     const connector = new XmlConnector(Readable.from([xml('<r><A>1</B></r>')]), 'utf-8');
-    await expect(readAll(connector)).rejects.toThrow();
+    await expect(readAll(connector)).rejects.toThrow(SourceFormatError);
   });
 
   it('does not resolve external entities', async () => {
     const bytes = Buffer.from(
       '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><rows><r><A>&x;</A></r></rows>',
     );
-    await expect(readAll(new XmlConnector(Readable.from([bytes]), 'utf-8'))).rejects.toThrow();
+    await expect(readAll(new XmlConnector(Readable.from([bytes]), 'utf-8'))).rejects.toThrow(
+      SourceFormatError,
+    );
   });
 });
 

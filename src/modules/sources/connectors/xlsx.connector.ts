@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { Readable } from 'node:stream';
 import type { RawRow, SourceConnector } from './csv.connector';
+import { SourceFormatError } from './format-error';
 
 type CellValue = ExcelJS.CellValue;
 
@@ -57,6 +58,10 @@ export class XlsxConnector implements SourceConnector {
         }
         break; // first worksheet only
       }
+    } catch (err) {
+      // A failed download stays an infrastructure error (retried); anything else is the file.
+      if (this.bytes.errored) throw err;
+      throw new SourceFormatError(`Unreadable Excel workbook: ${(err as Error).message}`);
     } finally {
       // Other sheets, or the reader stopping early (a 50-row preview): close the download.
       this.bytes.destroy();

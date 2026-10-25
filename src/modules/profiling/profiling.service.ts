@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CsvError } from 'csv-parse';
 import { AuditService, GLOBAL_STREAM } from '../audit';
-import { SourcesService } from '../sources';
+import { SourceFormatError, SourcesService } from '../sources';
 import { FileProfiler, ProfileReport } from './column-profiler';
 import { ProfilingRepository } from './profiling.repository';
 
@@ -25,7 +25,7 @@ export class ProfilingService {
   async profileFile(sourceFileId: string): Promise<void> {
     if (await this.repo.findByFile(sourceFileId)) return;
     const file = await this.sources.getFile(sourceFileId);
-    const encoding = file.encoding ?? 'utf-8';
+    const encoding = file.encoding ?? 'binary (xlsx)';
 
     let report: ProfileReport | FailedProfile;
     try {
@@ -33,7 +33,8 @@ export class ProfilingService {
       for await (const row of await this.sources.readRows(file)) profiler.add(row.values);
       report = profiler.report(encoding);
     } catch (err) {
-      if (!(err instanceof CsvError)) throw err; // infrastructure: let the queue retry
+      // Infrastructure errors retry through the queue; a malformed file is saved as failed.
+      if (!(err instanceof CsvError || err instanceof SourceFormatError)) throw err;
       report = { status: 'failed', encoding, error: err.message };
     }
 

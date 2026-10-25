@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import { SaxesParser } from 'saxes';
 import type { RawRow, SourceConnector } from './csv.connector';
 import type { TextEncoding } from './encoding';
+import { SourceFormatError } from './format-error';
 
 const ALIASES: Record<string, TextEncoding> = {
   'utf-8': 'utf-8',
@@ -49,7 +50,7 @@ export class XmlConnector implements SourceConnector {
     let text = '';
 
     parser.on('error', (err) => {
-      error ??= err;
+      error ??= new SourceFormatError(`Malformed XML: ${err.message}`);
     });
     parser.on('opentag', (tag) => {
       depth += 1;

@@ -61,4 +61,5 @@ ask before changing the design.
   (address reference data), `npm run db:seed`
   (reference data plus one demo user per role, e.g. `operator@setu.local`, password from `SEED_PASSWORD`)
 - Synthetic data: `npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252|utf8`
+  (`--format csv|xlsx|xml|sql`, default csv)
 - Audit tamper demo: `npm run tamper-demo -- --stream global --seq 2`, then `GET /api/v1/audit/verify`

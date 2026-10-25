@@ -2,12 +2,14 @@ import type { SourceKind } from '@prisma/client';
 import { Readable } from 'node:stream';
 import { CsvConnector, SourceConnector } from './csv.connector';
 import type { TextEncoding } from './encoding';
+import { SqlDumpConnector } from './sql-dump.connector';
 import { XlsxConnector } from './xlsx.connector';
 import { XmlConnector } from './xml.connector';
 
 export { declaredXmlEncoding } from './xml.connector';
 
 export type { RawRow, SourceConnector } from './csv.connector';
+export { SourceFormatError } from './format-error';
 
 /** Picks the connector for a source's kind. Text formats are decoded with `encoding`. */
 export function connectorFor(
@@ -22,8 +24,8 @@ export function connectorFor(
       return new XlsxConnector(bytes);
     case 'xml':
       return new XmlConnector(bytes, encoding);
-    default:
-      throw new Error(`No connector for ${kind} sources yet`);
+    case 'sql':
+      return new SqlDumpConnector(bytes, encoding);
   }
 }
 

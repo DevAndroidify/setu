@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { encodeCp1252, generateRegister } from '../../../../tools/generate-legacy-data';
 import { toXlsx } from '../../../../tools/legacy-formats';
 import { CsvConnector, RawRow, SourceConnector } from './csv.connector';
+import { SourceFormatError } from './format-error';
 import { cellText, XlsxConnector } from './xlsx.connector';
 
 async function readAll(connector: SourceConnector): Promise<RawRow[]> {
@@ -36,6 +37,13 @@ describe('XlsxConnector', () => {
       { rowNo: 1, values: { NAAM: ';Ltf', WARD_NO: '3' } },
       { rowNo: 2, values: { NAAM: '/fd', WARD_NO: '4' } },
     ]);
+  });
+
+  it('reports a corrupt workbook as a format error', async () => {
+    const corrupt = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(200, 7)]);
+    await expect(readAll(new XlsxConnector(Readable.from([corrupt])))).rejects.toThrow(
+      SourceFormatError,
+    );
   });
 
   it('closes the byte stream when the reader stops early', async () => {
