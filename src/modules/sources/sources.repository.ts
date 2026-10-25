@@ -39,7 +39,7 @@ export class SourcesRepository {
       objectKey: string;
       sha256: string;
       sizeBytes: number;
-      encoding: string;
+      encoding: string | null;
       uploadedBy: string;
     },
   ): Promise<SourceFile> {

@@ -13,7 +13,7 @@ import { PROFILE_QUEUE, type ProfileQueue } from '../../shared/queue/queues';
 import { StorageService } from '../../shared/storage/storage.service';
 import { AuditService, GLOBAL_STREAM } from '../audit';
 import type { AuthUser } from '../auth';
-import { CsvConnector, RawRow } from './connectors/csv.connector';
+import { connectorFor, isTextKind, RawRow, workbookProblem } from './connectors';
 import { detectEncoding, looksBinary, SNIFF_BYTES, TextEncoding } from './connectors/encoding';
 import { SourcesRepository, Tx } from './sources.repository';
 import {
@@ -75,9 +75,15 @@ export class SourcesService {
 
     // Judge the content, not the file name.
     const sample = file.buffer.subarray(0, SNIFF_BYTES);
-    const encoding: TextEncoding = detectEncoding(sample);
-    if (looksBinary(sample, encoding)) {
-      throw new UnsupportedMediaTypeException('The file is not a text (CSV) file');
+    let encoding: TextEncoding | null = null;
+    if (isTextKind(source.kind)) {
+      encoding = detectEncoding(sample);
+      if (looksBinary(sample, encoding)) {
+        throw new UnsupportedMediaTypeException(`The file is not a text (${source.kind}) file`);
+      }
+    } else {
+      const problem = workbookProblem(sample);
+      if (problem) throw new UnsupportedMediaTypeException(problem);
     }
 
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
@@ -144,12 +150,14 @@ export class SourcesService {
   }
 
   /**
-   * Streams a stored file's rows through its connector, decoded with the encoding detected at
-   * upload. Stopping early (e.g. after 50 rows) closes the download.
+   * Streams a stored file's rows through the connector for its source's kind (text formats
+   * decoded with the encoding detected at upload). Stopping early (e.g. after 50 rows) closes
+   * the download.
    */
   async readRows(file: SourceFile): Promise<AsyncIterable<RawRow>> {
+    const source = await this.getSource(file.sourceId);
     const encoding = (file.encoding ?? 'utf-8') as TextEncoding;
-    return new CsvConnector(await this.storage.stream(file.objectKey), encoding).read();
+    return connectorFor(source.kind, await this.storage.stream(file.objectKey), encoding).read();
   }
 
   recordRowCount(tx: Tx, id: string, rowCount: number): Promise<void> {

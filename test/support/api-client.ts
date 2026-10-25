@@ -32,16 +32,18 @@ export function apiClient(app: INestApplication, pool: Pool) {
         .attach('file', bytes, filename),
   });
 
-  /** Registers a CSV source and uploads the bytes; returns both ids. */
-  async function uploadFile(token: string, bytes: Buffer) {
+  /** Registers a source of the given kind and uploads the bytes; returns both ids. */
+  async function uploadFile(token: string, bytes: Buffer, kind = 'csv', filename?: string) {
     const source = await as(token)
       .post('/sources', {
         name: 'Household register',
-        kind: 'csv',
+        kind,
         agency: 'Ward office (synthetic)',
       })
       .expect(201);
-    const file = await as(token).upload(`/sources/${source.body.id}/files`, bytes).expect(202);
+    const file = await as(token)
+      .upload(`/sources/${source.body.id}/files`, bytes, filename)
+      .expect(202);
     return { sourceId: source.body.id as string, fileId: file.body.id as string };
   }
 

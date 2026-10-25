@@ -21,8 +21,9 @@ export async function createRun(
   token: string,
   bytes: Buffer,
   mode: 'dry_run' | 'production',
+  kind = 'csv',
 ): Promise<{ runId: string; fileId: string; mappingId: string }> {
-  const { sourceId, fileId } = await api.uploadFile(token, bytes);
+  const { sourceId, fileId } = await api.uploadFile(token, bytes, kind);
   const mapping = await api.as(token).post(`/sources/${sourceId}/mappings`, spec).expect(201);
   const run = await api
     .as(token)
