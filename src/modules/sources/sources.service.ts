@@ -13,7 +13,13 @@ import { PROFILE_QUEUE, type ProfileQueue } from '../../shared/queue/queues';
 import { StorageService } from '../../shared/storage/storage.service';
 import { AuditService, GLOBAL_STREAM } from '../audit';
 import type { AuthUser } from '../auth';
-import { connectorFor, isTextKind, RawRow, workbookProblem } from './connectors';
+import {
+  connectorFor,
+  declaredXmlEncoding,
+  isTextKind,
+  RawRow,
+  workbookProblem,
+} from './connectors';
 import { detectEncoding, looksBinary, SNIFF_BYTES, TextEncoding } from './connectors/encoding';
 import { SourcesRepository, Tx } from './sources.repository';
 import {
@@ -77,7 +83,15 @@ export class SourcesService {
     const sample = file.buffer.subarray(0, SNIFF_BYTES);
     let encoding: TextEncoding | null = null;
     if (isTextKind(source.kind)) {
-      encoding = detectEncoding(sample);
+      const declared = source.kind === 'xml' ? declaredXmlEncoding(sample) : null;
+      if (declared === 'unsupported') {
+        throw new UnsupportedMediaTypeException(
+          'The XML declares an encoding Setu cannot read (use UTF-8 or Windows-1252)',
+        );
+      }
+      // A byte-order mark beats the declaration; the declaration beats guessing.
+      const sniffed = detectEncoding(sample);
+      encoding = declared && !sniffed.startsWith('utf-16') ? declared : sniffed;
       if (looksBinary(sample, encoding)) {
         throw new UnsupportedMediaTypeException(`The file is not a text (${source.kind}) file`);
       }

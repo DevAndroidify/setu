@@ -134,8 +134,8 @@ describe('sources and profiling', () => {
   });
 
   it('rejects uploads for source kinds without a connector yet', async () => {
-    const sourceId = await createSource(operator, 'xml');
-    await upload(sourceId, Buffer.from('<rows/>')).expect(422);
+    const sourceId = await createSource(operator, 'sql');
+    await upload(sourceId, Buffer.from('INSERT INTO t VALUES (1);')).expect(422);
   });
 
   it('forbids a reviewer from registering sources', async () => {

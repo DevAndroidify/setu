@@ -10,7 +10,7 @@ export const createSourceSchema = z.object({
 export type CreateSourceRequest = z.infer<typeof createSourceSchema>;
 
 /** Connectors implemented so far; other kinds can be registered but not uploaded yet. */
-export const UPLOADABLE_KINDS = new Set(['csv', 'excel']);
+export const UPLOADABLE_KINDS = new Set(['csv', 'excel', 'xml']);
 
 export type UploadedFile = { buffer: Buffer; originalname: string; size: number };
 

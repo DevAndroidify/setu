@@ -3,6 +3,9 @@ import { Readable } from 'node:stream';
 import { CsvConnector, SourceConnector } from './csv.connector';
 import type { TextEncoding } from './encoding';
 import { XlsxConnector } from './xlsx.connector';
+import { XmlConnector } from './xml.connector';
+
+export { declaredXmlEncoding } from './xml.connector';
 
 export type { RawRow, SourceConnector } from './csv.connector';
 
@@ -17,6 +20,8 @@ export function connectorFor(
       return new CsvConnector(bytes, encoding);
     case 'excel':
       return new XlsxConnector(bytes);
+    case 'xml':
+      return new XmlConnector(bytes, encoding);
     default:
       throw new Error(`No connector for ${kind} sources yet`);
   }

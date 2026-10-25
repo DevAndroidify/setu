@@ -1,7 +1,7 @@
 import { INestApplication, INestApplicationContext } from '@nestjs/common';
 import { Pool } from 'pg';
 import { encodeCp1252, generateRegister } from '../../tools/generate-legacy-data';
-import { toXlsx } from '../../tools/legacy-formats';
+import { toXlsx, toXml } from '../../tools/legacy-formats';
 import { apiClient } from '../support/api-client';
 import { startApi } from '../support/app';
 import { createTestPool } from '../support/db';
@@ -12,6 +12,7 @@ const register = generateRegister({ rows: 500, seed: 2525, encoding: 'cp1252' })
 /** The same register in every format Setu reads besides CSV. */
 const FORMATS: { kind: string; bytes: () => Promise<Buffer> }[] = [
   { kind: 'excel', bytes: () => toXlsx(register) },
+  { kind: 'xml', bytes: async () => encodeCp1252(toXml(register, 'windows-1252')) },
 ];
 
 describe('legacy file formats', () => {
@@ -77,6 +78,13 @@ describe('legacy file formats', () => {
       .upload(`/sources/${sourceId}/files`, ole2, 'old.xls')
       .expect(415);
     expect(res.body.detail).toMatch(/save the file as \.xlsx or CSV/);
+  });
+
+  it('rejects an XML file that declares an encoding Setu cannot read', async () => {
+    const sourceId = await createSource('xml');
+    const bytes = Buffer.from('<?xml version="1.0" encoding="Shift_JIS"?><rows/>');
+    const res = await api.as(operator).upload(`/sources/${sourceId}/files`, bytes).expect(415);
+    expect(res.body.detail).toMatch(/UTF-8 or Windows-1252/);
   });
 
   it('rejects a text file uploaded to an Excel source', async () => {
