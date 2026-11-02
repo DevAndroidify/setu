@@ -75,6 +75,45 @@ describe('sources and profiling', () => {
     }
   }
 
+  const asOperator = (path: string) =>
+    http().get(`/api/v1${path}`).set('Authorization', `Bearer ${operator}`);
+
+  it('lists sources newest first with their file counts, page by page', async () => {
+    const first = await createSource();
+    const second = await createSource(operator, 'xml');
+    await upload(first, Buffer.from('A,B\r\n1,2\r\n')).expect(202);
+
+    const page = await asOperator('/sources?limit=2').expect(200);
+    expect(page.body.data.map((s: { id: string }) => s.id)).toEqual([second, first]);
+    expect(page.body.data[1]).toMatchObject({ kind: 'csv', fileCount: 1 });
+    const next = await asOperator(`/sources?limit=2&cursor=${page.body.nextCursor}`).expect(200);
+    expect(next.body.data.map((s: { id: string }) => s.id)).not.toContain(first);
+
+    const one = await asOperator(`/sources/${first}`).expect(200);
+    expect(one.body).toMatchObject({ id: first, name: 'Household register', fileCount: 1 });
+  });
+
+  it("lists a source's files with whether each has been profiled", async () => {
+    const sourceId = await createSource();
+    const res = await upload(sourceId, Buffer.from('NAAM,WARD\r\nx,1\r\n')).expect(202);
+    await waitForProfile(res.body.id);
+    const files = await asOperator(`/sources/${sourceId}/files`).expect(200);
+    expect(files.body).toEqual([
+      expect.objectContaining({
+        id: res.body.id,
+        filename: 'register.csv',
+        profileStatus: 'ok',
+        rowCount: 1,
+      }),
+    ]);
+  });
+
+  it('answers 404 for the files of an unknown source, and 403 to a reviewer', async () => {
+    await asOperator('/sources/00000000-0000-4000-8000-000000000000/files').expect(404);
+    const reviewer = await tokenFor('reviewer');
+    await http().get('/api/v1/sources').set('Authorization', `Bearer ${reviewer}`).expect(403);
+  });
+
   it('profiles the generated Windows-1252 register: Preeti columns and date formats flagged', async () => {
     const sourceId = await createSource();
     const register = generateRegister({ rows: 1000, seed: 42, encoding: 'cp1252' });

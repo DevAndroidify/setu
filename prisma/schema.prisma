@@ -337,6 +337,10 @@ model Quarantine {
   stagedRowId BigInt    @map("staged_row_id")
   stage       String
   reasons     Json
+  /// An operator's fix: legacy column -> corrected value. The raw row itself is never changed.
+  corrected   Json?
+  correctedBy String?   @map("corrected_by") @db.Uuid
+  correctedAt DateTime? @map("corrected_at") @db.Timestamptz(3)
   resolvedBy  String?   @map("resolved_by") @db.Uuid
   resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(3)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

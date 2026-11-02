@@ -21,7 +21,7 @@ import {
 } from './connectors';
 import { detectEncoding, looksBinary, SNIFF_BYTES, TextEncoding } from './connectors/encoding';
 import { SourcesRepository, Tx } from './sources.repository';
-import { CreateSourceRequest, SourceFileView, UploadedFile } from './sources.types';
+import { CreateSourceRequest, SourceFileView, SourceView, UploadedFile } from './sources.types';
 
 const toView = (file: SourceFile): SourceFileView => ({
   id: file.id,
@@ -140,6 +140,32 @@ export class SourcesService {
 
     await this.profileQueue.add('profile', { sourceFileId: created.id }, { jobId: created.id });
     return toView(created);
+  }
+
+  async listSources(limit: number, cursor?: string) {
+    const sources = await this.repo.listSources(limit, cursor);
+    const data = sources.map(({ _count, ...s }): SourceView => ({ ...s, fileCount: _count.files }));
+    const last = data[data.length - 1];
+    return { data, nextCursor: data.length === limit && last ? last.id : null };
+  }
+
+  async getSourceView(id: string): Promise<SourceView> {
+    const source = await this.repo.findSourceWithFileCount(id);
+    if (!source) throw new NotFoundException('Source not found');
+    const { _count, ...rest } = source;
+    return { ...rest, fileCount: _count.files };
+  }
+
+  /** A source's files, newest first, each with whether profiling has finished. */
+  async listFiles(sourceId: string): Promise<SourceFileView[]> {
+    await this.getSource(sourceId); // 404 for an unknown source
+    const files = await this.repo.listFiles(sourceId);
+    return files.map((f) => ({
+      ...toView(f),
+      profileStatus: f.profile
+        ? (f.profile.report as { status: 'ok' | 'failed' }).status
+        : 'pending',
+    }));
   }
 
   async getSource(id: string): Promise<Source> {

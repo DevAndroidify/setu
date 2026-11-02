@@ -13,6 +13,8 @@ import { MatchesController } from './matches.controller';
 import { PipelineQueueService } from './pipeline-queue.service';
 import { PipelineController } from './pipeline.controller';
 import { PipelineRepository } from './pipeline.repository';
+import { QuarantineFixController } from './quarantine-fix.controller';
+import { QuarantineFixService } from './quarantine-fix.service';
 import { RunEventsService } from './run-events.service';
 import { RunsService } from './runs.service';
 import { StagesService } from './stages.service';
@@ -29,11 +31,12 @@ import { StagesService } from './stages.service';
     MatchingModule,
     ReconciliationModule,
   ],
-  controllers: [PipelineController, MatchesController],
+  controllers: [PipelineController, MatchesController, QuarantineFixController],
   providers: [
     RunsService,
     StagesService,
     MatchReviewService,
+    QuarantineFixService,
     RunEventsService,
     PipelineQueueService,
     PipelineRepository,

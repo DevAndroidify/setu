@@ -3,7 +3,7 @@ import { compileStep } from '../transforms';
 import { compileRule, TARGET_FIELDS } from '../validation';
 
 const TARGETS = Object.keys(TARGET_FIELDS);
-const REQUIRED_TARGETS = ['person.name_ne', 'person.name_en'];
+export const REQUIRED_TARGETS = ['person.name_ne', 'person.name_en'];
 
 const fieldSchema = z
   .object({

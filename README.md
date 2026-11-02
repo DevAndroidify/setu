@@ -88,16 +88,16 @@ mocks the database.
 All routes are under `/api/v1`, JSON in and out, errors as RFC 9457 problem+json with the
 request id in `X-Request-Id`.
 
-| Area     | Routes                                                                                                                                                                                           |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Auth     | `POST /auth/login`, `POST /auth/refresh` (10 requests/min per IP), `GET /me`                                                                                                                     |
-| Sources  | `POST /sources`, `POST /sources/:id/files`, `GET /files/:id/profile`                                                                                                                             |
-| Mappings | `POST /sources/:id/mappings`, `GET /mappings/:id`, `POST /mappings/:id/preview`                                                                                                                  |
-| Runs     | `POST /runs`, `/runs/:id/submit`, `/approve`, `/start`, `/pause`, `/resume`, `/cancel`, `/rollback`, `GET /runs/:id`, `GET /runs/:id/events` (SSE), `GET /runs/:id/reconciliation` (JSON or CSV) |
-| Review   | `GET /quarantine`, `GET /matches`, `POST /matches/:id/decision`                                                                                                                                  |
-| Records  | `GET /persons`, `GET /persons/:id` (`?calendar=bs`, `?unmask=true&reason=`), `GET /persons/:id/lineage`                                                                                          |
-| Evidence | `GET /audit/events`, `GET /audit/verify`                                                                                                                                                         |
-| Ops      | `GET /health/live`, `GET /health/ready`, `GET /metrics`                                                                                                                                          |
+| Area     | Routes                                                                                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth     | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` (10 requests/min per IP), `GET /me`                                                                                                             |
+| Sources  | `GET /sources`, `POST /sources`, `GET /sources/:id`, `GET /sources/:id/files`, `POST /sources/:id/files`, `GET /files/:id/profile`                                                                            |
+| Mappings | `GET /mappings/catalog`, `GET`/`POST /sources/:id/mappings`, `POST /sources/:id/mappings/preview` (draft), `GET /mappings/:id`, `POST /mappings/:id/preview`                                                  |
+| Runs     | `GET /runs`, `POST /runs`, `/runs/:id/submit`, `/approve`, `/start`, `/pause`, `/resume`, `/cancel`, `/rollback`, `GET /runs/:id`, `GET /runs/:id/events` (SSE), `GET /runs/:id/reconciliation` (JSON or CSV) |
+| Review   | `GET /quarantine`, `GET /quarantine/:id`, `PATCH /quarantine/:id` (fix legacy values), `POST /quarantine/retry`, `GET /matches`, `POST /matches/:id/decision`                                                 |
+| Records  | `GET /persons`, `GET /persons/:id` (`?calendar=bs`, `?unmask=true&reason=`), `GET /persons/:id/lineage`                                                                                                       |
+| Evidence | `GET /audit/events`, `GET /audit/verify`                                                                                                                                                                      |
+| Ops      | `GET /health/live`, `GET /health/ready`, `GET /metrics`                                                                                                                                                       |
 
 Roles: operators upload, map and run; approvers approve production runs and roll back;
 reviewers decide duplicates; auditors read reports, lineage and the audit log. Citizenship
@@ -126,8 +126,6 @@ duplicate blocks to district + exact date of birth, which the scoring proves los
   numbers are stored as recorded, without a ward-level crosswalk.
 - The app connects as the schema owner, so the INSERT-only role on `audit` and the daily
   chain-head checkpoint to MinIO are not built yet (ADR 3).
-- Quarantined rows can be listed but not yet fixed and retried (`PATCH /quarantine/:id`,
-  `POST /quarantine/retry`).
 - No OpenAPI page (`/docs`), no `Idempotency-Key` header (run start is idempotent instead), no
   helmet or CORS allowlist yet.
 - Rollback runs inside the API request.

@@ -107,6 +107,33 @@ describe('auth', () => {
     });
   });
 
+  describe('POST /auth/logout', () => {
+    it('revokes the session: its refresh token no longer works and the cookie is cleared', async () => {
+      const user = await insertLoginUser(pool, 'operator', PASSWORD);
+      const cookie = refreshCookie(await login(user.email).expect(200));
+
+      const res = await http().post('/api/v1/auth/logout').set('Cookie', cookie).expect(204);
+      const cleared = ([] as string[]).concat(res.headers['set-cookie'] ?? []).join();
+      expect(cleared).toMatch(/setu_refresh=;.*Path=\/api\/v1\/auth/);
+      expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+
+      await http().post('/api/v1/auth/refresh').set('Cookie', cookie).expect(401);
+      const { rows } = await pool.query(
+        `SELECT count(*)::int n FROM audit.events WHERE action = 'auth.logout' AND entity_id = $1`,
+        [user.id],
+      );
+      expect(rows[0].n).toBe(1);
+    });
+
+    it('signs out without a cookie or with an unknown one, and revokes no other session', async () => {
+      const user = await insertLoginUser(pool, 'operator', PASSWORD);
+      const other = refreshCookie(await login(user.email).expect(200));
+      await http().post('/api/v1/auth/logout').expect(204);
+      await http().post('/api/v1/auth/logout').set('Cookie', 'setu_refresh=unknown').expect(204);
+      await http().post('/api/v1/auth/refresh').set('Cookie', other).expect(200);
+    });
+  });
+
   describe('GET /me', () => {
     it('returns 401 without an access token', async () => {
       const res = await http().get('/api/v1/me').expect(401);

@@ -58,6 +58,15 @@ export class AuthRepository {
     return count === 1;
   }
 
+  /** Revokes an active token by its hash; returns its user, or null if none was active. */
+  async revokeByHash(tokenHash: string): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<{ user_id: string }[]>`
+      UPDATE control.refresh_tokens SET revoked_at = now()
+      WHERE token_hash = ${tokenHash} AND revoked_at IS NULL
+      RETURNING user_id`;
+    return rows[0]?.user_id ?? null;
+  }
+
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },

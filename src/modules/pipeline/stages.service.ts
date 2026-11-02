@@ -516,12 +516,12 @@ export class StagesService {
     else await this.queue.batch(next);
   }
 
-  /** The next batch may be waiting for this one to finish matching. */
+  /** The next batch waiting to match may be waiting for this one. */
   private async wakeNextMatch(batch: Batch): Promise<void> {
     const after = await this.repo.transaction((tx) =>
-      this.repo.nextBatch(tx, batch.runId, batch.seq),
+      this.repo.nextBatchToMatch(tx, batch.runId, batch.seq),
     );
-    if (after?.stage === 'match') await this.queue.matchAfter(after, batch.id);
+    if (after) await this.queue.matchAfter(after, batch.id);
   }
 
   /** Read once per worker process, like compiled mappings. */

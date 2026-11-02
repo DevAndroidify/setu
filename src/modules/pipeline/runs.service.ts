@@ -280,21 +280,76 @@ export class RunsService {
     return this.get(id);
   }
 
+  /**
+   * Runs, newest first, each with the file, source and mapping version it was made from (read
+   * through those modules' services).
+   */
+  async list(
+    filter: { statuses?: RunStatus[]; sourceId?: string },
+    limit: number,
+    cursor?: string,
+  ) {
+    const fileIds = filter.sourceId
+      ? (await this.sources.listFiles(filter.sourceId)).map((f) => f.id)
+      : undefined;
+    const runs = await this.repo.listRuns({ statuses: filter.statuses, fileIds }, limit, cursor);
+
+    const data = await this.describe(runs);
+    const last = data[data.length - 1];
+    return { data, nextCursor: data.length === limit && last ? last.id : null };
+  }
+
+  /** Adds the file, source and mapping version each run was made from (via their services). */
+  private async describe(runs: Run[]) {
+    const files = new Map(
+      await Promise.all(
+        [...new Set(runs.map((r) => r.sourceFileId))].map(
+          async (id) => [id, await this.sources.getFile(id)] as const,
+        ),
+      ),
+    );
+    const sources = new Map(
+      await Promise.all(
+        [...new Set([...files.values()].map((f) => f.sourceId))].map(
+          async (id) => [id, await this.sources.getSource(id)] as const,
+        ),
+      ),
+    );
+    const versions = new Map(
+      await Promise.all(
+        [...new Set(runs.map((r) => r.mappingId))].map(
+          async (id) => [id, (await this.mappings.get(id)).version] as const,
+        ),
+      ),
+    );
+    return runs.map((run) => {
+      const file = files.get(run.sourceFileId)!;
+      const source = sources.get(file.sourceId)!;
+      return {
+        ...run,
+        file: { id: file.id, filename: file.filename, rowCount: file.rowCount },
+        source: { id: source.id, name: source.name, kind: source.kind },
+        mappingVersion: versions.get(run.mappingId)!,
+      };
+    });
+  }
+
   async get(id: string): Promise<Run> {
     const run = await this.repo.findRun(id);
     if (!run) throw new NotFoundException('Run not found');
     return run;
   }
 
-  /** The run with live progress: counts from staging and batches per stage. */
+  /** The run with what it was made from, and live progress: counts and batches per stage. */
   async status(id: string) {
     const run = await this.get(id);
-    const [staged, batches] = await Promise.all([
+    const [[described], staged, batches] = await Promise.all([
+      this.describe([run]),
       this.repo.stagedCounts(id),
       this.repo.batchSummary(id),
     ]);
     return {
-      ...run,
+      ...described!,
       progress: {
         ...staged,
         batches: Object.fromEntries(batches.map((b) => [b.stage, b._count])),

@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@ne
 import { z } from 'zod';
 import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { type AuthUser, CurrentUser, Roles } from '../auth';
+import { mappingCatalog } from './catalog';
 import { type MappingSpec, mappingSpecSchema } from './mapping-spec';
 import { MappingsService, PREVIEW_MAX_ROWS } from './mappings.service';
 
@@ -10,6 +11,9 @@ const previewSchema = z.object({
   limit: z.number().int().min(1).max(PREVIEW_MAX_ROWS).default(PREVIEW_MAX_ROWS),
 });
 type PreviewRequest = z.infer<typeof previewSchema>;
+
+const draftPreviewSchema = previewSchema.extend({ spec: mappingSpecSchema });
+type DraftPreviewRequest = z.infer<typeof draftPreviewSchema>;
 
 @Roles('operator', 'admin')
 @Controller()
@@ -24,6 +28,22 @@ export class MappingsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.mappings.create(sourceId, spec, user);
+  }
+
+  /** What a mapping spec may contain: targets, transforms (with their args) and rules. */
+  @Get('mappings/catalog')
+  catalog() {
+    return mappingCatalog();
+  }
+
+  /** Previews an unsaved spec on the first rows of one of the source's files. Writes nothing. */
+  @Post('sources/:id/mappings/preview')
+  @HttpCode(200)
+  previewDraft(
+    @Param('id', ParseUUIDPipe) sourceId: string,
+    @Body(new ZodValidationPipe(draftPreviewSchema)) body: DraftPreviewRequest,
+  ) {
+    return this.mappings.previewDraft(sourceId, body.spec, body.sourceFileId, body.limit);
   }
 
   @Get('sources/:id/mappings')

@@ -54,6 +54,23 @@ export class PipelineRepository {
     return tx.run.findUnique({ where: { id } });
   }
 
+  /** Newest first; `after` is the id of the last run of the previous page. */
+  listRuns(
+    filter: { statuses?: RunStatus[]; fileIds?: string[] },
+    limit: number,
+    after?: string,
+  ): Promise<Run[]> {
+    return this.prisma.run.findMany({
+      where: {
+        ...(filter.statuses ? { status: { in: filter.statuses } } : {}),
+        ...(filter.fileIds ? { sourceFileId: { in: filter.fileIds } } : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      ...(after ? { cursor: { id: after }, skip: 1 } : {}),
+    });
+  }
+
   /** Moves a run between statuses only if it is in one of `from`; false if it was not. */
   async transition(
     tx: Tx,
@@ -107,8 +124,39 @@ export class PipelineRepository {
     return n > 0;
   }
 
-  nextBatch(tx: Tx, runId: string, seq: number): Promise<Batch | null> {
-    return tx.batch.findUnique({ where: { runId_seq: { runId, seq: seq + 1 } } });
+  /** The first batch after `seq` that is waiting to match (not necessarily seq + 1). */
+  nextBatchToMatch(tx: Tx, runId: string, seq: number): Promise<Batch | null> {
+    return tx.batch.findFirst({
+      where: { runId, seq: { gt: seq }, stage: 'match' },
+      orderBy: { seq: 'asc' },
+    });
+  }
+
+  /** Sends batches back to a stage (a retry reopening a run). */
+  async reopenBatches(tx: Tx, ids: string[], stage: BatchStage): Promise<void> {
+    if (ids.length === 0) return;
+    await tx.batch.updateMany({
+      where: { id: { in: ids } },
+      data: { stage, status: 'pending', error: null, heartbeatAt: null },
+    });
+  }
+
+  /** A fixed row passed: its new values replace the staged result and it is valid again. */
+  async restage(
+    tx: Tx,
+    id: bigint,
+    normalized: object,
+    warnings: object[],
+    status: StagedStatus,
+  ): Promise<void> {
+    await tx.stagedRow.update({
+      where: { id },
+      data: {
+        normalized: normalized as Prisma.InputJsonObject,
+        warnings: warnings as Prisma.InputJsonArray,
+        status,
+      },
+    });
   }
 
   /** Creates the batch for (run, seq) once; extracting the same batch again returns it. */

@@ -62,16 +62,44 @@ export class MappingsService {
     );
   }
 
-  /** Runs a mapping over the first rows of a stored file. Writes nothing. */
+  /** Runs a saved mapping over the first rows of a stored file. Writes nothing. */
   async preview(mappingId: string, sourceFileId: string, limit: number) {
     const mapping = await this.get(mappingId);
+    const result = await this.previewSpec(
+      mapping.sourceId,
+      mappingSpecSchema.parse(mapping.spec),
+      sourceFileId,
+      limit,
+    );
+    return { mappingId, version: mapping.version, ...result };
+  }
+
+  /**
+   * Runs a spec that has not been saved (an editor's draft) over the first rows of one of the
+   * source's files. Writes nothing, so trying an edit does not create a version.
+   */
+  async previewDraft(sourceId: string, spec: MappingSpec, sourceFileId: string, limit: number) {
+    await this.sources.getSource(sourceId); // 404 for an unknown source
+    return {
+      mappingId: null,
+      version: null,
+      ...(await this.previewSpec(sourceId, spec, sourceFileId, limit)),
+    };
+  }
+
+  private async previewSpec(
+    sourceId: string,
+    spec: MappingSpec,
+    sourceFileId: string,
+    limit: number,
+  ) {
     const file = await this.sources.getFile(sourceFileId);
-    if (file.sourceId !== mapping.sourceId) {
+    if (file.sourceId !== sourceId) {
       throw new UnprocessableEntityException(
         'The file belongs to a different source than the mapping',
       );
     }
-    const compiled = await this.compile(mapping);
+    const compiled = compileMapping(spec, await this.target.addressReference());
     const ctx = { today: todayInNepal() };
 
     const rows: PreviewRow[] = [];
@@ -82,8 +110,6 @@ export class MappingsService {
     }
     const quarantined = rows.filter((r) => r.status === 'quarantined').length;
     return {
-      mappingId,
-      version: mapping.version,
       sourceFileId,
       summary: { rows: rows.length, valid: rows.length - quarantined, quarantined },
       rows,

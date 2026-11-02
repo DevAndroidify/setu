@@ -211,6 +211,31 @@ describe('pipeline', () => {
       expect(after.rows).toEqual(before.rows);
     });
 
+    it('lists runs newest first with their file, source and mapping version, filtered by status', async () => {
+      const res = await api.as(operator).get('/runs?status=completed,failed&limit=5').expect(200);
+      const run = res.body.data.find((r: { id: string }) => r.id === production.runId);
+      expect(run).toMatchObject({
+        status: 'completed',
+        mode: 'production',
+        file: { filename: 'register.csv', rowCount: 1000 },
+        source: { name: 'Household register', kind: 'csv' },
+        mappingVersion: 1,
+      });
+      for (const r of res.body.data) expect(['completed', 'failed']).toContain(r.status);
+      const drafts = await api.as(operator).get('/runs?status=draft').expect(200);
+      expect(drafts.body.data.map((r: { id: string }) => r.id)).not.toContain(production.runId);
+      await api.as(operator).get('/runs?status=finished').expect(400);
+    });
+
+    it('lists only the runs of one source when asked', async () => {
+      const { rows } = await pool.query(
+        `SELECT f.source_id FROM control.runs r JOIN control.source_files f ON f.id = r.source_file_id WHERE r.id = $1`,
+        [production.runId],
+      );
+      const res = await api.as(operator).get(`/runs?sourceId=${rows[0].source_id}`).expect(200);
+      expect(res.body.data.map((r: { id: string }) => r.id)).toEqual([production.runId]);
+    });
+
     it('validates a dry run without loading anything', async () => {
       const dry = generateRegister({ rows: 600, seed: 7, encoding: 'cp1252' });
       const { runId } = await createRun(api, operator, encodeCp1252(dry.csv), 'dry_run');
@@ -243,11 +268,14 @@ describe('pipeline', () => {
       expect(started).toBe(1);
     });
 
-    it('shows progress and the final counts on GET /runs/:id', async () => {
+    it('shows progress, the final counts and what the run was made from on GET /runs/:id', async () => {
       const res = await api.as(operator).get(`/runs/${production.runId}`).expect(200);
       expect(res.body).toMatchObject({
         status: 'completed',
         counts: production.counts,
+        file: { filename: 'register.csv' },
+        source: { name: 'Household register' },
+        mappingVersion: 1,
         progress: { loaded: production.counts.loaded, batches: { done: 5 } },
       });
     });

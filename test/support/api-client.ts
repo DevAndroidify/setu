@@ -25,6 +25,8 @@ export function apiClient(app: INestApplication, pool: Pool) {
         .post(`/api/v1${path}`)
         .set('Authorization', `Bearer ${token}`)
         .send(body ?? {}),
+    patch: (path: string, body: object) =>
+      http().patch(`/api/v1${path}`).set('Authorization', `Bearer ${token}`).send(body),
     upload: (path: string, bytes: Buffer, filename = 'register.csv') =>
       http()
         .post(`/api/v1${path}`)

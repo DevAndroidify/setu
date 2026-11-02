@@ -34,6 +34,44 @@ describe('mappings and preview', () => {
   const register = generateRegister({ rows: 200, seed: 42, encoding: 'cp1252' });
   const utf8 = generateRegister({ rows: 200, seed: 42, encoding: 'utf8' });
 
+  it('describes what a spec may contain: targets, transforms with their args, rules', async () => {
+    const res = await api.as(operator).get('/mappings/catalog').expect(200);
+    expect(res.body.targets).toContain('household.local_unit_code');
+    expect(res.body.rules).toContainEqual({ name: 'maxLength', param: 'number' });
+    const bsToAd = res.body.transforms.find((t: { name: string }) => t.name === 'bsToAd');
+    expect(bsToAd.args).toMatchObject({ properties: { formats: { type: 'array' } } });
+  });
+
+  it('previews an unsaved draft without creating a version', async () => {
+    const { sourceId, fileId } = await api.uploadFile(
+      operator,
+      encodeCp1252(register.csv.replace('SN', 'SN ')),
+    );
+    const res = await api
+      .as(operator)
+      .post(`/sources/${sourceId}/mappings/preview`, { spec, sourceFileId: fileId, limit: 10 })
+      .expect(200);
+    expect(res.body).toMatchObject({ mappingId: null, version: null, summary: { rows: 10 } });
+    expect(res.body.rows[0].values.name_ne).toBe(utf8.rows[0]![2]);
+    const versions = await api.as(operator).get(`/sources/${sourceId}/mappings`).expect(200);
+    expect(versions.body).toEqual([]);
+  });
+
+  it('refuses to preview an invalid draft, with the reasons', async () => {
+    const { sourceId, fileId } = await api.uploadFile(
+      operator,
+      Buffer.from(`SN\r\n${Date.now()}d\r\n`),
+    );
+    const res = await api
+      .as(operator)
+      .post(`/sources/${sourceId}/mappings/preview`, {
+        spec: { fields: [{ target: 'person.name_en', from: ['SN'], rules: ['after:soon'] }] },
+        sourceFileId: fileId,
+      })
+      .expect(400);
+    expect(res.body.errors.map((e: { path: string }) => e.path)).toContain('spec.fields.0.rules.0');
+  });
+
   it('saves each new spec as the next version', async () => {
     const { sourceId } = await api.uploadFile(operator, Buffer.from(`SN\r\n${Date.now()}\r\n`));
     const v1 = await api.as(operator).post(`/sources/${sourceId}/mappings`, spec).expect(201);

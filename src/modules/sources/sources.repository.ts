@@ -19,6 +19,32 @@ export class SourcesRepository {
     return tx.source.create({ data });
   }
 
+  /** Newest first; `after` is the id of the last source of the previous page. */
+  listSources(limit: number, after?: string) {
+    return this.prisma.source.findMany({
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      ...(after ? { cursor: { id: after }, skip: 1 } : {}),
+      include: { _count: { select: { files: true } } },
+    });
+  }
+
+  /** A source's files, newest first, with whether their profile is done. */
+  listFiles(sourceId: string) {
+    return this.prisma.sourceFile.findMany({
+      where: { sourceId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      include: { profile: { select: { report: true } } },
+    });
+  }
+
+  findSourceWithFileCount(id: string) {
+    return this.prisma.source.findUnique({
+      where: { id },
+      include: { _count: { select: { files: true } } },
+    });
+  }
+
   findSource(id: string): Promise<Source | null> {
     return this.prisma.source.findUnique({ where: { id } });
   }

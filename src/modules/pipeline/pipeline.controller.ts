@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Sse } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Sse,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { type AuthUser, CurrentUser, Roles } from '../auth';
@@ -16,9 +26,45 @@ const createRunSchema = z.object({
   mode: z.enum(['dry_run', 'production']),
 });
 
+const RUN_STATUSES = [
+  'draft',
+  'awaiting_approval',
+  'approved',
+  'queued',
+  'running',
+  'paused',
+  'cancelled',
+  'completed',
+  'failed',
+  'rolled_back',
+] as const;
+
+const listRunsSchema = z.object({
+  /** One status or several, comma separated: ?status=queued,running */
+  status: z
+    .string()
+    .transform((s) => s.split(',').map((v) => v.trim()))
+    .pipe(z.array(z.enum(RUN_STATUSES)).min(1))
+    .optional(),
+  sourceId: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  cursor: z.uuid().optional(),
+});
+type ListRunsQuery = z.infer<typeof listRunsSchema>;
+
 @Controller('runs')
 export class PipelineController {
   constructor(private readonly runs: RunsService) {}
+
+  /** Runs, newest first, with their file, source and mapping version. Any signed-in role. */
+  @Get()
+  list(@Query(new ZodValidationPipe(listRunsSchema)) query: ListRunsQuery) {
+    return this.runs.list(
+      { statuses: query.status, sourceId: query.sourceId },
+      query.limit,
+      query.cursor,
+    );
+  }
 
   @Roles('operator', 'admin')
   @Post()

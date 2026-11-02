@@ -51,6 +51,22 @@ export class AuthController {
     return this.respond(res, await this.auth.refresh(token));
   }
 
+  /** Signs out: revokes the session's refresh token and clears its cookie. Always 204. */
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('auth/logout')
+  @HttpCode(204)
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
+    const token: unknown = req.cookies?.[REFRESH_COOKIE];
+    if (typeof token === 'string' && token !== '') await this.auth.logout(token);
+    res.clearCookie(REFRESH_COOKIE, {
+      httpOnly: true,
+      secure: this.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/v1/auth',
+    });
+  }
+
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return this.auth.currentUser(user.id);

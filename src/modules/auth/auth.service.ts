@@ -87,6 +87,12 @@ export class AuthService {
     return this.issueTokens(stored.user);
   }
 
+  /** Ends the session of a refresh token. Unknown or already revoked tokens change nothing. */
+  async logout(refreshToken: string): Promise<void> {
+    const userId = await this.repo.revokeByHash(sha256(refreshToken));
+    if (userId) await this.auditLogin('auth.logout', userId, {});
+  }
+
   async currentUser(id: string): Promise<{ id: string; email: string; role: Role }> {
     const user = await this.repo.findUserById(id);
     if (!user) throw new NotFoundException('User no longer exists');

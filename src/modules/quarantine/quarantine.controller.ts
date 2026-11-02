@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { Roles } from '../auth';
@@ -11,10 +11,18 @@ const listQuery = z.object({
   cursor: z.string().regex(/^\d+$/).optional(),
 });
 
+const idParam = z.string().regex(/^\d+$/, 'must be a quarantine id');
+type QuarantineId = z.infer<typeof idParam>;
+
 @Roles('operator', 'admin')
 @Controller('quarantine')
 export class QuarantineController {
   constructor(private readonly quarantine: QuarantineService) {}
+
+  @Get(':id')
+  get(@Param('id', new ZodValidationPipe(idParam)) id: QuarantineId) {
+    return this.quarantine.get(BigInt(id));
+  }
 
   /** Open (unresolved) quarantined rows, oldest first. */
   @Get()
