@@ -60,6 +60,12 @@ the password in `SEED_PASSWORD`. Generate a messy register with
 `npm run generate:data -- --rows 1000 --seed 42 --encoding cp1252` (add `--format xlsx|xml|sql`
 for the other formats).
 
+Behind a reverse proxy (such as the
+[setu-frontend](https://github.com/DevAndroidify/setu-frontend) nginx), set
+`TRUST_PROXY_HOPS=1` so the `/auth` rate limit counts each client address rather than the
+proxy's. Leave it at 0 when clients reach the API directly, or they could forge
+`X-Forwarded-For`.
+
 ### Source formats
 
 | Kind    | Reads                                                                       | Notes                                                           |

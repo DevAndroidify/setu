@@ -17,6 +17,12 @@ export const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(7),
   /** Requests per minute per IP address to /auth/*. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
+  /**
+   * Reverse proxies in front of the API (e.g. the frontend's nginx). With 0 the client address
+   * is the TCP peer; with n it is read from the n-th X-Forwarded-For entry from the right, so
+   * rate limits count each client, not the proxy. Leave 0 when the API is reached directly.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   /** Port of the worker's Prometheus endpoint; 0 picks a free port. */
   WORKER_METRICS_PORT: z.coerce.number().int().min(0).max(65535).default(9464),
   // Pipeline tuning: measure with the load test before changing (docs/ARCHITECTURE.md).
