@@ -17,6 +17,11 @@ describe('loadEnv', () => {
     expect(env.LOG_LEVEL).toBe('info');
   });
 
+  it('signs storage requests for us-east-1 unless another region is set', () => {
+    expect(loadEnv(valid).S3_REGION).toBe('us-east-1');
+    expect(loadEnv({ ...valid, S3_REGION: 'ap-south-1' }).S3_REGION).toBe('ap-south-1');
+  });
+
   it('converts the port from text to a number', () => {
     expect(loadEnv({ ...valid, API_PORT: '8080' }).API_PORT).toBe(8080);
   });

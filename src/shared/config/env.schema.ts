@@ -12,6 +12,8 @@ export const envSchema = z.object({
   S3_ACCESS_KEY: z.string().min(1),
   S3_SECRET_KEY: z.string().min(1),
   S3_BUCKET: z.string().min(3).default('setu-sources'),
+  /** Region used to sign requests. MinIO and R2 accept us-east-1; B2, Supabase and AWS need theirs. */
+  S3_REGION: z.string().min(1).default('us-east-1'),
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(7),
