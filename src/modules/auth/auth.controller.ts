@@ -15,7 +15,14 @@ import { ENV } from '../../shared/config/config.module';
 import type { Env } from '../../shared/config/env.schema';
 import { ZodValidationPipe } from '../../shared/errors/zod-validation.pipe';
 import { AuthService } from './auth.service';
-import { type AuthUser, type IssuedTokens, type LoginRequest, loginSchema } from './auth.types';
+import {
+  type AuthUser,
+  type DemoLoginRequest,
+  demoLoginSchema,
+  type IssuedTokens,
+  type LoginRequest,
+  loginSchema,
+} from './auth.types';
 import { CurrentUser, Public } from './decorators';
 import { AuthRateLimitGuard } from './rate-limit.guard';
 
@@ -37,6 +44,18 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.respond(res, await this.auth.login(body));
+  }
+
+  /** Public demo only: sign in as a role's seeded account. 404 unless DEMO_MODE=true. */
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('auth/demo')
+  @HttpCode(200)
+  async demo(
+    @Body(new ZodValidationPipe(demoLoginSchema)) body: DemoLoginRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.respond(res, await this.auth.demoLogin(body.role));
   }
 
   @Public()

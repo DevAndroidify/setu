@@ -6,7 +6,7 @@ import { ENV } from '../../shared/config/config.module';
 import type { Env } from '../../shared/config/env.schema';
 import { AuditService, GLOBAL_STREAM } from '../audit';
 import { AuthRepository } from './auth.repository';
-import type { IssuedTokens, LoginRequest, Role } from './auth.types';
+import { demoEmail, type IssuedTokens, type LoginRequest, type Role } from './auth.types';
 import { hashPassword, verifyPassword } from './password';
 
 export const MAX_FAILED_LOGINS = 5;
@@ -54,6 +54,27 @@ export class AuthService {
       action: 'auth.login',
       entity: 'user',
       entityId: user.id,
+    });
+    return this.issueTokens(user);
+  }
+
+  /**
+   * Public demo only (DEMO_MODE): signs in as the seeded account of a role, no password.
+   * Answers 404 when demo mode is off, as if the route did not exist.
+   */
+  async demoLogin(role: Role): Promise<IssuedTokens> {
+    if (!this.env.DEMO_MODE) throw new NotFoundException('Cannot POST /api/v1/auth/demo');
+    const user = await this.repo.findUserByEmail(demoEmail(role));
+    if (!user || user.role !== role) {
+      throw new NotFoundException(`No demo account for ${role}; run npm run db:seed`);
+    }
+    await this.audit.append({
+      stream: GLOBAL_STREAM,
+      actorId: user.id,
+      action: 'auth.demo_login',
+      entity: 'user',
+      entityId: user.id,
+      payload: { role },
     });
     return this.issueTokens(user);
   }

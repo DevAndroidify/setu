@@ -15,6 +15,14 @@ export const envSchema = z.object({
   /** Region used to sign requests. MinIO and R2 accept us-east-1; B2, Supabase and AWS need theirs. */
   S3_REGION: z.string().min(1).default('us-east-1'),
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  /**
+   * A public demo: POST /auth/demo signs visitors in as the seeded <role>@setu.local account
+   * without a password. Only for deployments that hold synthetic data. Off unless "true".
+   */
+  DEMO_MODE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(7),
   /** Requests per minute per IP address to /auth/*. */

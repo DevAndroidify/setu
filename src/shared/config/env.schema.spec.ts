@@ -22,6 +22,13 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...valid, S3_REGION: 'ap-south-1' }).S3_REGION).toBe('ap-south-1');
   });
 
+  it('keeps password-free demo sign-in off unless DEMO_MODE is exactly "true"', () => {
+    expect(loadEnv(valid).DEMO_MODE).toBe(false);
+    expect(loadEnv({ ...valid, DEMO_MODE: 'false' }).DEMO_MODE).toBe(false);
+    expect(loadEnv({ ...valid, DEMO_MODE: 'true' }).DEMO_MODE).toBe(true);
+    expect(() => loadEnv({ ...valid, DEMO_MODE: 'yes' })).toThrow(/DEMO_MODE/);
+  });
+
   it('converts the port from text to a number', () => {
     expect(loadEnv({ ...valid, API_PORT: '8080' }).API_PORT).toBe(8080);
   });
